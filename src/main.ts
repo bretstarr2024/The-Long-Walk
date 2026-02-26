@@ -6,7 +6,7 @@ import './styles.css';
 import { createInitialGameState } from './state';
 import { gameTick } from './engine';
 import { checkScriptedEvents, checkHallucinations, checkEnding } from './narrative';
-import { initUI, render, setEnding } from './ui';
+import { initUI, render, setEnding, closeWalkerPicker } from './ui';
 import { closeDialogue } from './dialogue';
 import { isServerAvailable } from './agentClient';
 import { GameState } from './types';
@@ -107,6 +107,8 @@ document.addEventListener('keydown', (e) => {
         closeDialogue(state);
       } else if (state.llmDialogue) {
         state.llmDialogue = null;
+      } else {
+        closeWalkerPicker();
       }
       break;
   }

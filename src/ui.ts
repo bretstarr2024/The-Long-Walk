@@ -25,6 +25,7 @@ let cachedActionsHtml = '';
 let cachedControlsHtml = '';
 let cachedDialogueHtml = '';
 let cachedLlmChatHtml = '';
+let walkerPickerOpen = false;
 
 // ============================================================
 // INIT — sets up app ref + event delegation (once)
@@ -62,6 +63,16 @@ function setupEventDelegation() {
       return;
     }
 
+    const pickEl = target.closest('[data-pick-walker]') as HTMLElement;
+    if (pickEl) {
+      const num = parseInt(pickEl.dataset.pickWalker!);
+      console.log('[UI] Walker picked:', num);
+      walkerPickerOpen = false;
+      cachedActionsHtml = '';
+      handleWalkerPicked(gameState, num);
+      return;
+    }
+
     const optionEl = target.closest('[data-option]') as HTMLElement;
     if (optionEl) {
       const idx = parseInt(optionEl.dataset.option!);
@@ -80,13 +91,17 @@ function setupEventDelegation() {
     }
   });
 
-  // Enter key in chat input sends message
+  // Keyboard shortcuts within game UI
   app.addEventListener('keydown', (e: KeyboardEvent) => {
     if (!gameState) return;
     const target = e.target as HTMLElement;
     if (target.id === 'llm-chat-input' && e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSendChat(gameState);
+    }
+    if (e.key === 'Escape' && walkerPickerOpen) {
+      walkerPickerOpen = false;
+      cachedActionsHtml = '';
     }
   });
 }
@@ -98,9 +113,9 @@ function handleAction(action: string, state: GameState) {
     case 'restart': window.location.reload(); break;
     case 'speed-down': setPlayerSpeed(state, state.player.targetSpeed - 0.2); break;
     case 'speed-up': setPlayerSpeed(state, state.player.targetSpeed + 0.2); break;
-    case 'pos-front': setPlayerPosition(state, 'front'); break;
-    case 'pos-middle': setPlayerPosition(state, 'middle'); break;
-    case 'pos-back': setPlayerPosition(state, 'back'); break;
+    case 'pos-front': changePosition(state, 'front'); break;
+    case 'pos-middle': changePosition(state, 'middle'); break;
+    case 'pos-back': changePosition(state, 'back'); break;
     case 'food': requestFood(state); break;
     case 'water': requestWater(state); break;
     case 'talk': handleTalk(state); break;
@@ -116,46 +131,70 @@ function handleAction(action: string, state: GameState) {
   }
 }
 
+function changePosition(state: GameState, pos: PackPosition) {
+  if (state.player.position === pos) return;
+  const prev = state.player.position;
+  setPlayerPosition(state, pos);
+  walkerPickerOpen = false;
+  cachedStatusHtml = '';
+  cachedWalkersHtml = '';
+  cachedActionsHtml = '';
+  const labels: Record<string, string> = {
+    front: 'front of the pack',
+    middle: 'middle of the pack',
+    back: 'back of the pack',
+  };
+  addNarrative(state, `You drift from the ${labels[prev]} to the ${labels[pos]}.`, 'narration');
+}
+
 function handleTalk(state: GameState) {
-  const nearby = getNearbyWalkers(state);
-  console.log('[Talk] Nearby walkers:', nearby.length, 'at position:', state.player.position);
-
-  if (nearby.length === 0) {
-    addNarrative(state, 'Nobody nearby to talk to.', 'system');
-    return;
-  }
-
-  // Already in an LLM chat?
   if (state.llmDialogue) return;
 
-  if (!state.llmAvailable) {
-    addNarrative(state, 'Server offline — cannot talk right now.', 'system');
+  // Toggle walker picker
+  walkerPickerOpen = !walkerPickerOpen;
+  cachedActionsHtml = ''; // force re-render
+}
+
+function handleWalkerPicked(state: GameState, walkerNumber: number) {
+  const w = state.walkers.find(ws => ws.walkerNumber === walkerNumber);
+  if (!w || !w.alive) return;
+
+  const data = getWalkerData(state, walkerNumber);
+  if (!data) return;
+
+  // Alliance check
+  if (w.relationship >= 60 && !w.isAlliedWithPlayer && state.player.alliances.length < 2) {
+    formAlliance(state, walkerNumber);
     return;
   }
 
-  // Find the best Tier 1/2 walker to talk to nearby
-  const tier12 = nearby.filter(w => {
-    const d = getWalkerData(state, w.walkerNumber);
-    return d && d.tier <= 2;
-  });
+  // Tier 1/2 + server online → LLM chat
+  if (state.llmAvailable && data.tier <= 2 && !state.llmDialogue) {
+    state.llmDialogue = {
+      walkerId: walkerNumber,
+      walkerName: data.name,
+      messages: [],
+      isStreaming: false,
+      streamBuffer: '',
+    };
+    cachedLlmChatHtml = '';
+    console.log('[Talk] LLM chat opened with', data.name, '#' + walkerNumber);
+    return;
+  }
 
-  const target = tier12.length > 0
-    ? tier12[Math.floor(Math.random() * tier12.length)]
-    : nearby[Math.floor(Math.random() * nearby.length)];
+  // Tier 3 or server offline → contextual line
+  const line = getContextualLine(state, w);
+  if (line) {
+    addNarrative(state, `${data.name}: ${line}`, 'dialogue');
+    w.relationship = Math.min(100, w.relationship + 1);
+  }
+}
 
-  const data = getWalkerData(state, target.walkerNumber);
-  if (!data) return;
-
-  // Open LLM dialogue
-  state.llmDialogue = {
-    walkerId: target.walkerNumber,
-    walkerName: data.name,
-    messages: [],
-    isStreaming: false,
-    streamBuffer: '',
-  };
-  cachedLlmChatHtml = '';
-  console.log('[Talk] LLM chat opened with', data.name, '#' + target.walkerNumber);
+export function closeWalkerPicker() {
+  if (walkerPickerOpen) {
+    walkerPickerOpen = false;
+    cachedActionsHtml = '';
+  }
 }
 
 function closeLLMDialogue(state: GameState) {
@@ -333,38 +372,9 @@ function handleThink(state: GameState) {
 }
 
 function handleWalkerClick(state: GameState, num: number) {
-  const w = state.walkers.find(ws => ws.walkerNumber === num);
-  if (!w || !w.alive) return;
-
-  const data = getWalkerData(state, num);
-  console.log('[Walker Click]', data?.name, '#' + num, 'rel:', w.relationship, 'tier:', data?.tier);
-
-  // Alliance check first
-  if (w.relationship >= 60 && !w.isAlliedWithPlayer && state.player.alliances.length < 2) {
-    formAlliance(state, num);
-    return;
-  }
-
-  // Open LLM chat if server available and walker is Tier 1 or 2
-  if (state.llmAvailable && data && data.tier <= 2 && !state.llmDialogue) {
-    state.llmDialogue = {
-      walkerId: num,
-      walkerName: data.name,
-      messages: [],
-      isStreaming: false,
-      streamBuffer: '',
-    };
-    cachedLlmChatHtml = '';
-    console.log('[Walker Click] LLM chat opened with', data.name);
-    return;
-  }
-
-  // For Tier 3 or server offline, just show a contextual line
-  const line = getContextualLine(state, w);
-  if (data && line) {
-    addNarrative(state, `${data.name}: ${line}`, 'dialogue');
-    w.relationship = Math.min(100, w.relationship + 1);
-  }
+  // Clicking a walker in the nearby list acts the same as picking them from the Talk menu
+  console.log('[Walker Click]', num);
+  handleWalkerPicked(state, num);
 }
 
 function advanceIntro(state: GameState) {
@@ -788,10 +798,41 @@ function updateActionsPanel(state: GameState) {
   const nearby = getNearbyWalkers(state);
   const foodDisabled = p.foodCooldown > 0;
   const waterDisabled = p.waterCooldown > 0;
+  const talkDisabled = nearby.length === 0;
+
+  // Close picker if LLM dialogue opened
+  if (state.llmDialogue) walkerPickerOpen = false;
+
+  let pickerHtml = '';
+  if (walkerPickerOpen && nearby.length > 0) {
+    const items = nearby.map(w => {
+      const d = getWalkerData(state, w.walkerNumber);
+      if (!d) return '';
+      const rel = w.relationship > 40 ? 'friendly'
+        : w.relationship > 10 ? 'curious'
+        : w.relationship < -10 ? 'hostile'
+        : 'neutral';
+      const tierLabel = d.tier === 1 ? 'T1' : d.tier === 2 ? 'T2' : 'T3';
+      const tierClass = d.tier <= 2 ? 'tier-major' : 'tier-minor';
+      const allyBadge = w.isAlliedWithPlayer ? ' <span class="walker-ally-badge">ALLY</span>' : '';
+      return `
+        <button class="picker-item" data-pick-walker="${w.walkerNumber}">
+          <span class="picker-name">${d.name} <span class="picker-num">#${w.walkerNumber}</span>${allyBadge}</span>
+          <span class="picker-info"><span class="picker-tier ${tierClass}">${tierLabel}</span> <span class="walker-disposition ${rel}">${rel}</span></span>
+        </button>`;
+    }).join('');
+
+    pickerHtml = `
+      <div class="walker-picker">
+        <div class="picker-title">Who do you want to talk to?</div>
+        ${items}
+      </div>`;
+  }
 
   const html = `
     <div class="panel-title">ACTIONS</div>
-    <button class="action-btn" data-action="talk" ${nearby.length === 0 || !state.llmAvailable ? 'disabled' : ''}>Talk${!state.llmAvailable ? ' (offline)' : ''}</button>
+    <button class="action-btn ${walkerPickerOpen ? 'active' : ''}" data-action="talk" ${talkDisabled ? 'disabled' : ''}>Talk</button>
+    ${pickerHtml}
     <button class="action-btn" data-action="food" ${foodDisabled ? 'disabled' : ''}>
       Request Food ${foodDisabled ? `(${Math.ceil(p.foodCooldown)}m)` : ''}
     </button>
