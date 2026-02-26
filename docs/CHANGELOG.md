@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.3.0 — 2026-02-26
+
+Stable DOM, generative music, game feel improvements.
+
+- **Stable DOM panels**: Status panel and LLM chat overlay refactored to create-once + targeted DOM updates — eliminates button flicker and unclickable controls
+- **Generative ambient music**: Chord progression in Am with crossfading pads, filtered noise (wind), rhythmic pulse at 72 BPM walking cadence
+- **EQ-style speed meter**: Dynamic bar with peak-hold indicator, 4.0 mph danger line, target speed triangle
+- **Physical position changes**: Speed boost + stamina cost + smooth ease-in-out animation on canvas (no teleporting)
+- **Warning pacing fix**: NPC backstop now spaces warnings 5 game-minutes apart with gradual speed degradation, preventing walkers from being killed without proper warnings
+- **Chat overlay improvements**: Append-only messages, streaming element promotion (no flicker), click-background-to-close, Escape key closes overlay
+
+### Bug fixes
+- Fixed status panel innerHTML rebuild every 200ms making position buttons unclickable
+- Fixed chat overlay innerHTML rebuild causing X button to not work
+- Fixed 1-frame flicker on walker response complete (streaming element promoted in-place)
+- Fixed NPC warning backstop issuing warnings every game tick instead of spaced intervals
+- Fixed music inaudible on laptop speakers (was sub-bass drone at 55 Hz)
+
 ## 0.2.0 — 2026-02-26
 
 LLM agent integration, visualization, and UX improvements.
