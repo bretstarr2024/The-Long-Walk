@@ -143,6 +143,7 @@ function updatePlayerStamina(state: GameState, gameMinutes: number) {
   const seg = getRouteSegment(state.world.milesWalked);
   if (seg.terrain === 'uphill') modifier *= 1.5;
   else if (seg.terrain === 'downhill') modifier *= 0.8;
+  else if (seg.terrain === 'rough') modifier *= 1.2;
 
   if (state.world.weather === 'rain') modifier *= 1.25;
   else if (state.world.weather === 'heavy_rain') modifier *= 1.25;
@@ -800,6 +801,15 @@ export function updatePositionTransition(gameMinutes: number) {
   if (positionTransition.progress >= 1) {
     positionTransition = null;
   }
+}
+
+/** Reset module-level state for headless testing */
+export function resetEngineGlobals() {
+  npcSlowAccum.clear();
+  npcLastWarningHour.clear();
+  npcWarningBoost.clear();
+  lastAmbientMile = -5;
+  positionTransition = null;
 }
 
 // ============================================================

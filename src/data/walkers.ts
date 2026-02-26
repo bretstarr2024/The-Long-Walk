@@ -501,7 +501,7 @@ const FIRST_NAMES = [
   'Archer', 'Bates', 'Cobb', 'Dalton', 'Eaton', 'Floyd', 'Graves', 'Hull',
   'Ingalls', 'Joyce', 'Knox', 'Lang', 'Moody', 'Nash', 'Odom', 'Pace',
   'Quinn', 'Riggs', 'Stokes', 'Tuttle', 'Unger', 'Vance', 'Weeks', 'Wyatt',
-  'Abbott', 'Blackwell',
+  'Abbott', 'Blackwell', 'Connors',
 ];
 
 const STATES = [

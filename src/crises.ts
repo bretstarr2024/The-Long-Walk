@@ -24,6 +24,11 @@ function minCrisisGap(act: number): number {
 // Track last mile we rolled for crisis check (once per mile)
 let lastCrisisCheckMile = 0;
 
+/** Reset module-level state for headless testing */
+export function resetCrisisGlobals() {
+  lastCrisisCheckMile = 0;
+}
+
 // ============================================================
 // HELPER: Check if ally is nearby at player's position
 // ============================================================
@@ -652,12 +657,18 @@ function applyEffects(state: GameState, effects: CrisisEffects, targetWalker?: n
   if (effects.hunger) p.hunger = Math.max(0, Math.min(100, p.hunger + effects.hunger));
   if (effects.clarity) p.clarity = Math.max(0, Math.min(100, p.clarity + effects.clarity));
 
-  // Warning risk
+  // Warning risk — issue through proper warning pipeline
   if (effects.warningRisk && Math.random() < effects.warningRisk) {
     p.warnings = Math.min(3, p.warnings + 1);
+    // Sync cooldown/tracking state so normal warning system doesn't double-punish
+    p.lastWarningTime = state.world.hoursElapsed;
+    p.slowAccum = 0;
+    state.lastWarningMile = state.world.milesWalked;
     if (p.warnings >= 3) {
       p.alive = false;
       state.screen = 'gameover';
+      addNarrative(state, `"Warning. Walker #100. Third warning." The soldiers' rifles come up.`, 'elimination');
+      addNarrative(state, `Walker #100 — ${p.name} — ELIMINATED. Mile ${Math.round(state.world.milesWalked)}.`, 'elimination');
     } else {
       addNarrative(state, `"Warning. Walker #100. Warning number ${p.warnings}."`, 'warning');
       p.morale = Math.max(0, p.morale - 10);
