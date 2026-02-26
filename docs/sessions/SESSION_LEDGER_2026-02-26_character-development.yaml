@@ -1,0 +1,84 @@
+session_id: "2026-02-26-character-development"
+date: "2026-02-26"
+branch: "main"
+version: "0.4.0"
+prior_session: "2026-02-26-stable-dom-music-gamefeel"
+
+build_verification:
+  client_typescript: "pass"
+  server_typescript: "pass"
+  vite_build: "pass"
+
+commits:
+  - hash: "9429482"
+    message: "feat(client,server): Character development overhaul — scenes, approaches, arcs, dossiers"
+
+artifacts_updated:
+  - path: "src/types.ts"
+    change: "Added ScenePanel, ActiveScene, ApproachState, WalkerArcStage, NPCRelationship interfaces; extended GameState and WalkerState with scene/approach/arc/crisis fields"
+  - path: "src/state.ts"
+    change: "Initialize new fields: activeScene, activeApproach, lastApproachMile, lastOverheardMile, overhearInProgress, triggeredEvents, conversationCount, revealedFacts, playerActions, lastDeclineMile"
+  - path: "src/data/walkers.ts"
+    change: "Added arcStages (5 phases each) for 9 Tier 1 walkers, declineNarratives, eliminationScene panels, NPC_RELATIONSHIPS (8 arcs, ~25 stages)"
+  - path: "server/prompts.ts"
+    change: "Extended GameContext with arc fields; buildGameContextBlock now includes 'Your Arc with This Player' section"
+  - path: "src/agentClient.ts"
+    change: "Extended GameContextForAgent with arc fields; added requestApproach() SSE client function"
+  - path: "server/index.ts"
+    change: "Added /api/approach SSE streaming endpoint for NPC-initiated conversations"
+  - path: "src/narrative.ts"
+    change: "8 scripted events upgraded to scene overlays with scenePanels; added checkAbsenceEffects() for ghost references"
+  - path: "src/engine.ts"
+    change: "Tier 1 elimination scenes, decline narrative firing, warning mile tracking, playerActions tracking for food/water sharing"
+  - path: "src/ui.ts"
+    change: "Scene overlay, approach banner, walker dossier UI; arc context computation in buildGameContext; conversation tracking on chat close"
+  - path: "src/styles.css"
+    change: "CSS for scene overlay, approach banner, dossier panel with animations"
+  - path: "src/main.ts"
+    change: "Wired scene pause, absence effects, approach checks into game loop; keyboard handlers for scene advancement"
+  - path: "src/approach.ts"
+    change: "New file: NPC approach trigger system with 8 approach types and priority queue"
+  - path: "src/crises.ts"
+    change: "New file: Crisis resolution system with player action tracking"
+  - path: "src/overhear.ts"
+    change: "New file: Arc-aware ambient overhear system with NPC_RELATIONSHIPS priority"
+  - path: "docs/CHANGELOG.md"
+    change: "Added v0.4.0 entry documenting all character development systems"
+
+decisions_made:
+  - decision: "8 approach types with fixed priority ordering"
+    rationale: "arc_milestone is highest priority because story arc moments should never be missed; introduction is low priority because it's ambient flavor"
+  - decision: "Scene overlays pause the game completely"
+    rationale: "Major story moments should not be missed while the player is adjusting speed or reading other UI"
+  - decision: "Approach banner uses Reply/Nod/Ignore instead of opening chat directly"
+    rationale: "Low-friction response options let players engage at their preferred depth without forcing full LLM conversation"
+  - decision: "Click walker → dossier → Talk (not direct chat)"
+    rationale: "Dossier provides context before conversation and surfaces what the player already knows about the walker"
+  - decision: "All LLM features degrade gracefully when server offline"
+    rationale: "Scenes show scripted panels, approaches don't fire, overheards use existing system"
+  - decision: "Absence effects use 3% per-mile chance with 2-30 mile window"
+    rationale: "Sparse enough to feel surprising, long enough window to create lasting emotional impact"
+
+open_questions:
+  - "How does the crisis system (src/crises.ts) interact with the approach system when both trigger simultaneously?"
+  - "Is 30s auto-dismiss for approaches the right timing? May need playtesting."
+  - "Should Tier 2 walkers get arc stages? Currently optional and none are defined."
+
+known_risks:
+  - "LLM cost approximately doubles with approach system (~30-60 additional calls per playthrough)"
+  - "Overlay z-index stacking may have edge cases with multiple overlays triggering in same frame"
+  - "Decline narratives fire based on eliminationMile which is set at state init — if walker survives longer than expected, declines may fire too early"
+  - "Crisis system (src/crises.ts) was created as a new file but the crisis data/triggers may need population"
+
+explicitly_deferred:
+  - "Proximity approach type: listed in approach types but not yet implemented (would need position tracking)"
+  - "Optional LLM reaction panels after scripted scenes: plan mentioned this but not implemented to keep scenes predictable"
+  - "Tier 2 walker arc stages: architecture supports it but no data defined yet"
+
+next_actions:
+  - "Playtest first 50 miles: verify ~2 approaches fire, ~3 overheards trigger, 1-2 scenes appear"
+  - "Playtest to mile 200: verify arc progression, elimination scenes, absence effects"
+  - "Verify all overlay stacking works correctly (crisis > scene > approach > dossier)"
+  - "Populate crisis system with actual crisis events if not already done"
+  - "Consider adding Tier 2 arc stages for most popular supporting walkers"
+  - "Tune approach timing and auto-dismiss duration based on playtesting"
