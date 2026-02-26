@@ -178,6 +178,21 @@ export interface ConversationRecord {
   relationshipChange: number;
 }
 
+// --- LLM Dialogue ---
+
+export interface LLMDialogueMessage {
+  role: 'player' | 'walker';
+  text: string;
+}
+
+export interface LLMDialogueState {
+  walkerId: number;
+  walkerName: string;
+  messages: LLMDialogueMessage[];
+  isStreaming: boolean;
+  streamBuffer: string;
+}
+
 // --- Master Game State ---
 
 export interface GameState {
@@ -187,6 +202,8 @@ export interface GameState {
   walkerData: WalkerData[];
   narrativeLog: NarrativeEntry[];
   activeDialogue: DialogueInstance | null;
+  llmDialogue: LLMDialogueState | null;
+  llmAvailable: boolean;
   conversationHistory: ConversationRecord[];
   eventLog: string[];
   triggeredEvents: Set<string>;

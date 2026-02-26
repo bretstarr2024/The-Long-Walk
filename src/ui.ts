@@ -9,6 +9,7 @@ import { getAvailableDialogues, startDialogue, selectDialogueOption, closeDialog
 import { getEndingText, getGameStats, EndingType } from './narrative';
 import { getRouteSegment } from './data/route';
 import { initVisualization, updateVisualization } from './visualization';
+import { sendMessage, isServerAvailable, type WalkerProfile, type GameContextForAgent } from './agentClient';
 
 let app: HTMLElement;
 let currentRenderedScreen: string = '';
@@ -23,6 +24,7 @@ let cachedWalkersHtml = '';
 let cachedActionsHtml = '';
 let cachedControlsHtml = '';
 let cachedDialogueHtml = '';
+let cachedLlmChatHtml = '';
 
 // ============================================================
 // INIT — sets up app ref + event delegation (once)
@@ -77,6 +79,16 @@ function setupEventDelegation() {
       setPlayerSpeed(gameState, parseInt(target.value) / 10);
     }
   });
+
+  // Enter key in chat input sends message
+  app.addEventListener('keydown', (e: KeyboardEvent) => {
+    if (!gameState) return;
+    const target = e.target as HTMLElement;
+    if (target.id === 'llm-chat-input' && e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendChat(gameState);
+    }
+  });
 }
 
 function handleAction(action: string, state: GameState) {
@@ -92,6 +104,8 @@ function handleAction(action: string, state: GameState) {
     case 'food': requestFood(state); break;
     case 'water': requestWater(state); break;
     case 'talk': handleTalk(state); break;
+    case 'send-chat': handleSendChat(state); break;
+    case 'close-chat': closeLLMDialogue(state); break;
     case 'observe': handleObserve(state); break;
     case 'think': handleThink(state); break;
     case 'pause': state.isPaused = !state.isPaused; break;
@@ -107,28 +121,189 @@ function handleTalk(state: GameState) {
   console.log('[Talk] Nearby walkers:', nearby.length, 'at position:', state.player.position);
 
   if (nearby.length === 0) {
-    console.log('[Talk] No nearby walkers — aborting');
+    addNarrative(state, 'Nobody nearby to talk to.', 'system');
     return;
   }
 
-  // Check for scripted Tier 1 dialogue
-  const available = getAvailableDialogues(state);
-  console.log('[Talk] Available scripted dialogues:', available.map(d => d.id));
+  // Already in an LLM chat?
+  if (state.llmDialogue) return;
 
-  if (available.length > 0) {
-    console.log('[Talk] Starting scripted dialogue:', available[0].id);
-    startDialogue(state, available[0].id);
+  if (!state.llmAvailable) {
+    addNarrative(state, 'Server offline — cannot talk right now.', 'system');
     return;
   }
 
-  // Fallback: contextual line from a random nearby walker
-  const w = nearby[Math.floor(Math.random() * nearby.length)];
-  const data = getWalkerData(state, w.walkerNumber);
-  const line = getContextualLine(state, w);
-  console.log('[Talk] Contextual line from', data?.name, ':', line);
-  if (data && line) {
-    addNarrative(state, `${data.name}: ${line}`, 'dialogue');
-    w.relationship = Math.min(100, w.relationship + 1);
+  // Find the best Tier 1/2 walker to talk to nearby
+  const tier12 = nearby.filter(w => {
+    const d = getWalkerData(state, w.walkerNumber);
+    return d && d.tier <= 2;
+  });
+
+  const target = tier12.length > 0
+    ? tier12[Math.floor(Math.random() * tier12.length)]
+    : nearby[Math.floor(Math.random() * nearby.length)];
+
+  const data = getWalkerData(state, target.walkerNumber);
+  if (!data) return;
+
+  // Open LLM dialogue
+  state.llmDialogue = {
+    walkerId: target.walkerNumber,
+    walkerName: data.name,
+    messages: [],
+    isStreaming: false,
+    streamBuffer: '',
+  };
+  cachedLlmChatHtml = '';
+  console.log('[Talk] LLM chat opened with', data.name, '#' + target.walkerNumber);
+}
+
+function closeLLMDialogue(state: GameState) {
+  if (!state.llmDialogue) return;
+  const name = state.llmDialogue.walkerName;
+  state.llmDialogue = null;
+  cachedLlmChatHtml = '';
+  addNarrative(state, `You stop talking to ${name} and focus on walking.`, 'narration');
+}
+
+function buildGameContext(state: GameState, walkerNum: number): GameContextForAgent {
+  const w = state.walkers.find(ws => ws.walkerNumber === walkerNum)!;
+  const remaining = getWalkersRemaining(state);
+  const recentEvents = state.narrativeLog
+    .slice(-10)
+    .filter(e => e.type === 'elimination' || e.type === 'event' || e.type === 'warning')
+    .map(e => e.text);
+
+  return {
+    milesWalked: state.world.milesWalked,
+    hoursElapsed: state.world.hoursElapsed,
+    currentTime: state.world.currentTime,
+    dayNumber: state.world.dayNumber,
+    isNight: state.world.isNight,
+    weather: state.world.weather,
+    terrain: state.world.terrain,
+    crowdDensity: state.world.crowdDensity,
+    crowdMood: state.world.crowdMood,
+    currentAct: state.world.currentAct,
+    horrorTier: state.world.horrorTier,
+    walkersRemaining: remaining,
+    playerName: state.player.name,
+    playerWarnings: state.player.warnings,
+    playerMorale: Math.round(state.player.morale),
+    playerStamina: Math.round(state.player.stamina),
+    walkerWarnings: w.warnings,
+    walkerMorale: Math.round(w.morale),
+    walkerStamina: Math.round(w.stamina),
+    walkerRelationship: w.relationship,
+    walkerBehavioralState: w.behavioralState,
+    recentEvents,
+  };
+}
+
+function buildWalkerProfile(state: GameState, walkerNum: number): WalkerProfile {
+  const d = getWalkerData(state, walkerNum)!;
+  return {
+    name: d.name,
+    walkerNumber: d.walkerNumber,
+    age: d.age,
+    homeState: d.homeState,
+    tier: d.tier,
+    personalityTraits: d.personalityTraits,
+    dialogueStyle: d.dialogueStyle,
+    backstoryNotes: d.backstoryNotes,
+    psychologicalArchetype: d.psychologicalArchetype,
+    alliancePotential: d.alliancePotential,
+  };
+}
+
+async function handleSendChat(state: GameState) {
+  if (!state.llmDialogue || state.llmDialogue.isStreaming) return;
+
+  const input = document.getElementById('llm-chat-input') as HTMLInputElement;
+  if (!input) return;
+
+  const message = input.value.trim();
+  if (!message) return;
+
+  input.value = '';
+  const dlg = state.llmDialogue;
+
+  // Add player message
+  dlg.messages.push({ role: 'player', text: message });
+  dlg.isStreaming = true;
+  dlg.streamBuffer = '';
+  cachedLlmChatHtml = ''; // force re-render
+
+  const walkerProfile = buildWalkerProfile(state, dlg.walkerId);
+  const gameCtx = buildGameContext(state, dlg.walkerId);
+
+  try {
+    for await (const event of sendMessage(dlg.walkerId, message, walkerProfile, gameCtx)) {
+      if (!state.llmDialogue) break; // Chat was closed during streaming
+
+      switch (event.type) {
+        case 'token':
+          dlg.streamBuffer += event.text;
+          cachedLlmChatHtml = ''; // force re-render for streaming text
+          break;
+
+        case 'effect':
+          applyGameEffect(state, event);
+          break;
+
+        case 'done':
+          dlg.messages.push({ role: 'walker', text: dlg.streamBuffer || event.text });
+          dlg.streamBuffer = '';
+          dlg.isStreaming = false;
+          cachedLlmChatHtml = '';
+          // Add to narrative log
+          addNarrative(state, `${dlg.walkerName}: ${event.text}`, 'dialogue');
+          break;
+
+        case 'error':
+          dlg.isStreaming = false;
+          dlg.messages.push({ role: 'walker', text: `[Connection lost: ${event.error}]` });
+          cachedLlmChatHtml = '';
+          break;
+      }
+    }
+  } catch (err: any) {
+    if (state.llmDialogue) {
+      dlg.isStreaming = false;
+      dlg.messages.push({ role: 'walker', text: `[Error: ${err.message || 'Connection failed'}]` });
+      cachedLlmChatHtml = '';
+    }
+  }
+}
+
+function applyGameEffect(state: GameState, effect: { effectType: string; walkerId?: number; delta?: number; key?: string; value?: boolean; text?: string }) {
+  const w = state.llmDialogue ? state.walkers.find(ws => ws.walkerNumber === state.llmDialogue!.walkerId) : null;
+
+  switch (effect.effectType) {
+    case 'relationship':
+      if (w && effect.delta) {
+        w.relationship = Math.max(-100, Math.min(100, w.relationship + effect.delta));
+        console.log(`[Effect] Relationship ${effect.delta > 0 ? '+' : ''}${effect.delta} → ${w.relationship}`);
+      }
+      break;
+    case 'morale':
+      if (effect.delta) {
+        state.player.morale = Math.max(0, Math.min(100, state.player.morale + effect.delta));
+        console.log(`[Effect] Morale ${effect.delta > 0 ? '+' : ''}${effect.delta} → ${state.player.morale}`);
+      }
+      break;
+    case 'flag':
+      if (effect.key) {
+        state.player.flags[effect.key] = effect.value ?? true;
+        console.log(`[Effect] Flag "${effect.key}" = ${effect.value}`);
+      }
+      break;
+    case 'info':
+      if (effect.text) {
+        addNarrative(state, effect.text, 'narration');
+        console.log(`[Effect] Info shared: ${effect.text}`);
+      }
+      break;
   }
 }
 
@@ -164,17 +339,27 @@ function handleWalkerClick(state: GameState, num: number) {
   const data = getWalkerData(state, num);
   console.log('[Walker Click]', data?.name, '#' + num, 'rel:', w.relationship, 'tier:', data?.tier);
 
-  const available = getAvailableDialogues(state).filter(d => d.speaker === num);
-  if (available.length > 0) {
-    startDialogue(state, available[0].id);
-    return;
-  }
-
+  // Alliance check first
   if (w.relationship >= 60 && !w.isAlliedWithPlayer && state.player.alliances.length < 2) {
     formAlliance(state, num);
     return;
   }
 
+  // Open LLM chat if server available and walker is Tier 1 or 2
+  if (state.llmAvailable && data && data.tier <= 2 && !state.llmDialogue) {
+    state.llmDialogue = {
+      walkerId: num,
+      walkerName: data.name,
+      messages: [],
+      isStreaming: false,
+      streamBuffer: '',
+    };
+    cachedLlmChatHtml = '';
+    console.log('[Walker Click] LLM chat opened with', data.name);
+    return;
+  }
+
+  // For Tier 3 or server offline, just show a contextual line
   const line = getContextualLine(state, w);
   if (data && line) {
     addNarrative(state, `${data.name}: ${line}`, 'dialogue');
@@ -398,6 +583,7 @@ function renderGame(state: GameState) {
   updateActionsPanel(state);
   updateGameControls(state);
   updateDialogueOverlay(state);
+  updateLLMChatOverlay(state);
 
   // Update bird's eye visualization
   const canvas = document.getElementById('viz-canvas') as HTMLCanvasElement;
@@ -431,6 +617,7 @@ function createGameStructure() {
       </div>
       <div class="game-controls" id="game-controls"></div>
       <div id="dialogue-container"></div>
+      <div id="llm-chat-container"></div>
     </div>
   `;
 
@@ -604,7 +791,7 @@ function updateActionsPanel(state: GameState) {
 
   const html = `
     <div class="panel-title">ACTIONS</div>
-    <button class="action-btn" data-action="talk" ${nearby.length === 0 ? 'disabled' : ''}>Talk</button>
+    <button class="action-btn" data-action="talk" ${nearby.length === 0 || !state.llmAvailable ? 'disabled' : ''}>Talk${!state.llmAvailable ? ' (offline)' : ''}</button>
     <button class="action-btn" data-action="food" ${foodDisabled ? 'disabled' : ''}>
       Request Food ${foodDisabled ? `(${Math.ceil(p.foodCooldown)}m)` : ''}
     </button>
@@ -676,6 +863,83 @@ function updateDialogueOverlay(state: GameState) {
   if (html !== cachedDialogueHtml) {
     container.innerHTML = html;
     cachedDialogueHtml = html;
+  }
+}
+
+// --- LLM Chat overlay ---
+function updateLLMChatOverlay(state: GameState) {
+  const container = document.getElementById('llm-chat-container');
+  if (!container) return;
+
+  if (!state.llmDialogue) {
+    if (cachedLlmChatHtml !== '') {
+      container.innerHTML = '';
+      cachedLlmChatHtml = '';
+    }
+    return;
+  }
+
+  const dlg = state.llmDialogue;
+  const w = state.walkers.find(ws => ws.walkerNumber === dlg.walkerId);
+  const relLabel = !w ? '' : w.relationship > 40 ? 'friendly' : w.relationship > 10 ? 'curious' : w.relationship < -10 ? 'hostile' : 'neutral';
+
+  const messagesHtml = dlg.messages.map(m =>
+    `<div class="chat-message chat-${m.role}">
+      <span class="chat-sender">${m.role === 'player' ? 'You' : dlg.walkerName}</span>
+      <span class="chat-text">${m.text}</span>
+    </div>`
+  ).join('');
+
+  const streamingHtml = dlg.isStreaming && dlg.streamBuffer
+    ? `<div class="chat-message chat-walker streaming">
+        <span class="chat-sender">${dlg.walkerName}</span>
+        <span class="chat-text">${dlg.streamBuffer}</span>
+      </div>`
+    : dlg.isStreaming
+    ? `<div class="chat-message chat-walker streaming">
+        <span class="chat-sender">${dlg.walkerName}</span>
+        <span class="chat-text"><span class="typing-dots">...</span></span>
+      </div>`
+    : '';
+
+  const html = `
+    <div class="dialogue-overlay">
+      <div class="llm-chat-box">
+        <div class="llm-chat-header">
+          <div>
+            <span class="dialogue-speaker">${dlg.walkerName} (#${dlg.walkerId})</span>
+            <span class="walker-disposition ${relLabel}" style="margin-left:0.5rem;">${relLabel}</span>
+          </div>
+          <button class="speed-btn" data-action="close-chat" style="font-size:0.8rem;width:auto;padding:0.2rem 0.5rem;">X</button>
+        </div>
+        <div class="llm-chat-messages" id="llm-chat-messages">
+          ${dlg.messages.length === 0 && !dlg.isStreaming
+            ? '<div class="chat-hint">Say something to start a conversation...</div>'
+            : ''}
+          ${messagesHtml}
+          ${streamingHtml}
+        </div>
+        <div class="llm-chat-input-row">
+          <input type="text" id="llm-chat-input" class="llm-chat-input" placeholder="Type a message..." autocomplete="off" ${dlg.isStreaming ? 'disabled' : ''} />
+          <button class="action-btn" data-action="send-chat" ${dlg.isStreaming ? 'disabled' : ''} style="padding:0.5rem 1rem;">Send</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  if (html !== cachedLlmChatHtml) {
+    container.innerHTML = html;
+    cachedLlmChatHtml = html;
+
+    // Auto-scroll messages
+    const msgsEl = document.getElementById('llm-chat-messages');
+    if (msgsEl) msgsEl.scrollTop = msgsEl.scrollHeight;
+
+    // Focus input
+    if (!dlg.isStreaming) {
+      const inp = document.getElementById('llm-chat-input') as HTMLInputElement;
+      if (inp) inp.focus();
+    }
   }
 }
 

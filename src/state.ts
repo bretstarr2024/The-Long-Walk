@@ -79,6 +79,8 @@ export function createInitialGameState(): GameState {
     walkerData,
     narrativeLog: [],
     activeDialogue: null,
+    llmDialogue: null,
+    llmAvailable: false,
     conversationHistory: [],
     eventLog: [],
     triggeredEvents: new Set(),

@@ -8,6 +8,7 @@ import { gameTick } from './engine';
 import { checkScriptedEvents, checkHallucinations, checkEnding } from './narrative';
 import { initUI, render, setEnding } from './ui';
 import { closeDialogue } from './dialogue';
+import { isServerAvailable } from './agentClient';
 import { GameState } from './types';
 
 // ============================================================
@@ -16,12 +17,22 @@ import { GameState } from './types';
 
 let state: GameState;
 
-function init() {
+async function init() {
   state = createInitialGameState();
   initUI();
   render(state);
   state.lastTickTime = performance.now();
   requestAnimationFrame(gameLoop);
+
+  // Check LLM server availability
+  const available = await isServerAvailable();
+  state.llmAvailable = available;
+  console.log(`[Main] LLM server ${available ? 'ONLINE' : 'OFFLINE'}`);
+
+  // Periodic health check every 30s
+  setInterval(async () => {
+    state.llmAvailable = await isServerAvailable();
+  }, 30000);
 }
 
 // ============================================================
@@ -94,6 +105,8 @@ document.addEventListener('keydown', (e) => {
     case 'Escape':
       if (state.activeDialogue) {
         closeDialogue(state);
+      } else if (state.llmDialogue) {
+        state.llmDialogue = null;
       }
       break;
   }
