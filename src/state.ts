@@ -22,6 +22,8 @@ export function createDefaultPlayer(): PlayerState {
     clarity: 100,
     warnings: 0,
     warningTimer: 0,
+    slowAccum: 0,
+    lastWarningTime: -999,
     alive: true,
     position: 'middle',
     foodCooldown: 0,
@@ -57,7 +59,7 @@ export function createWalkerState(data: WalkerData): WalkerState {
   return {
     walkerNumber: data.walkerNumber,
     alive: true,
-    stamina: baseStamina + (Math.random() * 15),
+    stamina: Math.min(100, baseStamina + (Math.random() * 15)),
     speed: 4.3 + Math.random() * 0.6,
     pain: 0,
     morale: 50 + Math.random() * 40,

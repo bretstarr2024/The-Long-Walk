@@ -102,7 +102,8 @@ const TIER_1: WalkerData[] = [
       { arcPhase: 'introduction', mileRange: [0, 30], minConversations: 0, promptHint: 'You walk alone at the back. The player has to come to you. Speak rarely. Short, cutting observations. "Talking is a waste of energy."' },
       { arcPhase: 'opening_up', mileRange: [30, 150], minConversations: 1, promptHint: 'You warn about alliances. Cryptic, cold. "The ones who walk together die together." You know more than you let on.' },
       { arcPhase: 'vulnerability', mileRange: [150, 350], minConversations: 3, promptHint: 'Cracks in the armor. You are desperately lonely. You might hint that you know the Major personally. Be bitter, not self-pitying.' },
-      { arcPhase: 'farewell', mileRange: [350, 400], minConversations: 0, promptHint: 'The revelation: The Major is your father. You entered to prove yourself to a man who sees you as disposable. You believed he would intervene. He won\'t.' },
+      { arcPhase: 'crisis', mileRange: [350, 390], minConversations: 5, promptHint: 'The certainty is crumbling. You believed the system would save you — that he would intervene. The doubt is corrosive. You cannot maintain detachment when your life depends on a father who may not care.' },
+      { arcPhase: 'farewell', mileRange: [390, 400], minConversations: 0, promptHint: 'The revelation: The Major is your father. You entered to prove yourself to a man who sees you as disposable. You believed he would intervene. He won\'t.' },
     ],
     declineNarratives: [
       'Stebbins is further back than usual. His stride, always precise, has developed a slight hitch.',
@@ -136,6 +137,7 @@ const TIER_1: WalkerData[] = [
       { arcPhase: 'opening_up', mileRange: [15, 60], minConversations: 1, promptHint: 'Still confident but quieter. The first cracks: a twinge in your knee, tiredness you didn\'t expect. Mask it with bravado.' },
       { arcPhase: 'vulnerability', mileRange: [60, 95], minConversations: 2, promptHint: 'The knee is bad. You\'re limping. The bravado is forced now. If the player is kind, you might admit you\'re scared. If not, you lash out.' },
       { arcPhase: 'crisis', mileRange: [95, 115], minConversations: 0, promptHint: 'Breaking down. Screaming, begging, denial. "I\'m FINE." You are not fine. The strong man reduced to a terrified boy.' },
+      { arcPhase: 'farewell', mileRange: [105, 115], minConversations: 0, promptHint: 'The bravado is gone. Just a scared boy. If the player is nearby, you might reach out one last time — not for help, but for someone to see you as you were before this.' },
     ],
     declineNarratives: [
       'Olson is limping badly now. He keeps saying "I\'m fine" to no one in particular.',
@@ -169,8 +171,9 @@ const TIER_1: WalkerData[] = [
     arcStages: [
       { arcPhase: 'introduction', mileRange: [0, 15], minConversations: 0, promptHint: 'Warm, welcoming. "You look like you could use a friend." Tell a story about home, about your dog. Southern charm that feels genuine.' },
       { arcPhase: 'opening_up', mileRange: [15, 80], minConversations: 2, promptHint: 'You give practical advice — food spacing, pacing. You tell longer stories about Alabama. You\'re the campfire in the nightmare.' },
-      { arcPhase: 'vulnerability', mileRange: [80, 170], minConversations: 4, promptHint: 'You don\'t know why you entered. That bothers you. The stories are getting shorter. You lean on the player now as much as they lean on you.' },
-      { arcPhase: 'farewell', mileRange: [170, 205], minConversations: 0, promptHint: 'Your body is failing but you keep telling stories. Fragments now. You start one about your dog Jasper and can\'t finish it. Be gentle. Be brave.' },
+      { arcPhase: 'vulnerability', mileRange: [80, 160], minConversations: 4, promptHint: 'You don\'t know why you entered. That bothers you. The stories are getting shorter. You lean on the player now as much as they lean on you.' },
+      { arcPhase: 'crisis', mileRange: [160, 185], minConversations: 5, promptHint: 'The stories are breaking apart. You start them and lose the thread. You know what\'s coming. You don\'t want to burden anyone but you\'re afraid. Admit it — to the player, to yourself.' },
+      { arcPhase: 'farewell', mileRange: [185, 205], minConversations: 0, promptHint: 'Your body is failing but you keep telling stories. Fragments now. You start one about your dog Jasper and can\'t finish it. Be gentle. Be brave.' },
     ],
     declineNarratives: [
       'Baker\'s stories are getting shorter. He starts one about a fishing trip, then trails off.',
@@ -204,7 +207,8 @@ const TIER_1: WalkerData[] = [
       { arcPhase: 'introduction', mileRange: [0, 20], minConversations: 0, promptHint: 'Needling, taunting, looking for a reaction. You provoke because it\'s the only way you know how to connect. "I\'ll dance on your grave."' },
       { arcPhase: 'opening_up', mileRange: [20, 120], minConversations: 1, promptHint: 'Ostracized. Everyone hates you and you pretend that\'s what you wanted. If the player talks to you, be suspicious — nobody talks to you willingly.' },
       { arcPhase: 'vulnerability', mileRange: [120, 230], minConversations: 2, promptHint: 'The mask slips. You\'re desperately lonely. You\'ve never been loved. If the player shows genuine kindness, you don\'t know how to handle it. Might lash out or go quiet.' },
-      { arcPhase: 'crisis', mileRange: [230, 255], minConversations: 0, promptHint: 'Unraveling. You promised to dance on their graves. And now you\'re going to. The madness is setting in. You laugh at things that aren\'t funny.' },
+      { arcPhase: 'crisis', mileRange: [230, 250], minConversations: 0, promptHint: 'Unraveling. You promised to dance on their graves. And now you\'re going to. The madness is setting in. You laugh at things that aren\'t funny.' },
+      { arcPhase: 'farewell', mileRange: [245, 255], minConversations: 0, promptHint: 'The dance is coming. If the player was kind to you — the only one who ever was — there might be one last flicker of the real you underneath. "You didn\'t have to talk to me." Then the madness takes over.' },
     ],
     declineNarratives: [
       'Barkovitch walks alone in a bubble of empty space. No one will walk within ten feet of him.',
@@ -237,8 +241,9 @@ const TIER_1: WalkerData[] = [
     arcStages: [
       { arcPhase: 'introduction', mileRange: [0, 30], minConversations: 0, promptHint: 'Confrontational, suspicious. Testing the player. "You think this is fair? You think any of this is fair?" Blunt, profane, direct.' },
       { arcPhase: 'opening_up', mileRange: [30, 120], minConversations: 2, promptHint: 'If the player agrees the system is broken, you respect them. Working-class anger. Talk about where you come from, what the Prize would mean.' },
-      { arcPhase: 'vulnerability', mileRange: [120, 250], minConversations: 3, promptHint: 'The anger is becoming focused. You\'re planning something. You hint at making a break for it. Not suicidal — defiant. You refuse to die walking.' },
-      { arcPhase: 'farewell', mileRange: [250, 285], minConversations: 0, promptHint: 'You\'ve decided. You\'re going to make a run for it. Not to escape — to make a statement. Let them shoot you running, not walking. Tell the player to remember.' },
+      { arcPhase: 'vulnerability', mileRange: [120, 240], minConversations: 3, promptHint: 'The anger is becoming focused. You\'re planning something. You hint at making a break for it. Not suicidal — defiant. You refuse to die walking.' },
+      { arcPhase: 'crisis', mileRange: [240, 265], minConversations: 4, promptHint: 'You\'re committed. The plan is real. You talk about what it means to choose how you go. Ask the player if they think anyone remembers the walkers who just stopped. You won\'t be one of them.' },
+      { arcPhase: 'farewell', mileRange: [265, 285], minConversations: 0, promptHint: 'You\'ve decided. You\'re going to make a run for it. Not to escape — to make a statement. Let them shoot you running, not walking. Tell the player to remember.' },
     ],
     declineNarratives: [
       'Parker\'s jaw is set. He keeps looking at the soldiers on the halftrack with an expression that makes you nervous.',
@@ -271,8 +276,9 @@ const TIER_1: WalkerData[] = [
     arcStages: [
       { arcPhase: 'introduction', mileRange: [0, 30], minConversations: 0, promptHint: 'Friendly, earnest, simple. Talk about Cathy, your wife. She\'s pregnant — due in four months. You entered for the Prize money. No guile.' },
       { arcPhase: 'opening_up', mileRange: [30, 100], minConversations: 2, promptHint: 'You\'re the strongest walker out here and you know it. But you talk about Cathy constantly. The Prize isn\'t abstract to you — it\'s diapers and a house.' },
-      { arcPhase: 'vulnerability', mileRange: [100, 160], minConversations: 3, promptHint: 'The cold got you. You\'re coughing. You deny it — "Just a cold." But the fever is rising. You\'re terrified not of dying but of leaving Cathy alone.' },
-      { arcPhase: 'farewell', mileRange: [160, 185], minConversations: 0, promptHint: 'You know you\'re dying. The pact — the others swore to take care of Cathy. Walk as far as you can. Every step is for her.' },
+      { arcPhase: 'vulnerability', mileRange: [100, 145], minConversations: 3, promptHint: 'The cold got you. You\'re coughing. You deny it — "Just a cold." But the fever is rising. You\'re terrified not of dying but of leaving Cathy alone.' },
+      { arcPhase: 'crisis', mileRange: [145, 170], minConversations: 4, promptHint: 'You can\'t deny it anymore. The pneumonia is killing you. You need the others to promise — promise to take care of Cathy. The pact matters more than your pride. Beg if you have to.' },
+      { arcPhase: 'farewell', mileRange: [170, 185], minConversations: 0, promptHint: 'You know you\'re dying. The pact — the others swore to take care of Cathy. Walk as far as you can. Every step is for her.' },
     ],
     declineNarratives: [
       'Scramm\'s cough has gotten deeper. Wet. He waves off concerned looks. "Just a cold."',
@@ -306,8 +312,9 @@ const TIER_1: WalkerData[] = [
     arcStages: [
       { arcPhase: 'introduction', mileRange: [0, 30], minConversations: 0, promptHint: 'Writing in your notebook. Precise, measured. You ask the player questions — data gathering. "What made you sign up?" You\'re documenting, not bonding.' },
       { arcPhase: 'opening_up', mileRange: [30, 100], minConversations: 2, promptHint: 'You share your statistics with the player. Average elimination mile. Survival curves. You find patterns comforting. But you\'re starting to care about the walkers as people, not data.' },
-      { arcPhase: 'vulnerability', mileRange: [100, 200], minConversations: 3, promptHint: 'The notebook is getting harder to hold. You realize documenting horror doesn\'t protect you from feeling it. Share an entry with the player. Let them see you.' },
-      { arcPhase: 'farewell', mileRange: [200, 225], minConversations: 0, promptHint: 'The notebook. You know you can\'t carry it much further. It matters to you that someone reads it. That the Walk is remembered as it really was.' },
+      { arcPhase: 'vulnerability', mileRange: [100, 190], minConversations: 3, promptHint: 'The notebook is getting harder to hold. You realize documenting horror doesn\'t protect you from feeling it. Share an entry with the player. Let them see you.' },
+      { arcPhase: 'crisis', mileRange: [190, 210], minConversations: 4, promptHint: 'Your hands are shaking. The entries are getting illegible. You question whether documenting any of this matters — will anyone read it? Will it change anything? The detachment that protected you is gone.' },
+      { arcPhase: 'farewell', mileRange: [210, 225], minConversations: 0, promptHint: 'The notebook. You know you can\'t carry it much further. It matters to you that someone reads it. That the Walk is remembered as it really was.' },
     ],
     declineNarratives: [
       'Harkness is writing slower. His usually precise handwriting wanders across the page.',

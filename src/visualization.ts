@@ -138,6 +138,10 @@ function getNoiseTexture(w: number, h: number): HTMLCanvasElement {
 let frameCounter = 0;
 let tooltipWalker: { name: string; status: string; x: number; y: number } | null = null;
 
+// Cached lookup map: walkerNumber → WalkerData (rebuilt when length changes)
+let walkerDataMap: Map<number, import('./types').WalkerData> | null = null;
+let walkerDataMapSize = 0;
+
 // ============================================================
 // INIT
 // ============================================================
@@ -277,10 +281,17 @@ export function updateVisualization(state: GameState, canvas: HTMLCanvasElement)
 
   // --- Alive walkers: thermal signatures ---
   tooltipWalker = null;
-  const alive = state.walkers.filter(w => w.alive);
 
-  for (const w of alive) {
-    const data = state.walkerData.find(d => d.walkerNumber === w.walkerNumber);
+  // Build walkerData lookup map once (avoids O(n) find per walker per frame)
+  if (!walkerDataMap || walkerDataMapSize !== state.walkerData.length) {
+    walkerDataMap = new Map();
+    for (const d of state.walkerData) walkerDataMap.set(d.walkerNumber, d);
+    walkerDataMapSize = state.walkerData.length;
+  }
+
+  for (const w of state.walkers) {
+    if (!w.alive) continue;
+    const data = walkerDataMap.get(w.walkerNumber);
     if (!data) continue;
 
     const band = positionBand(w.position);
@@ -430,7 +441,8 @@ export function updateVisualization(state: GameState, canvas: HTMLCanvasElement)
   ctx.setLineDash([]);
 
   // --- Walker count (bottom-left) ---
-  const remaining = alive.length + (state.player.alive ? 1 : 0);
+  const aliveCount = state.walkers.reduce((n, w) => n + (w.alive ? 1 : 0), 0);
+  const remaining = aliveCount + (state.player.alive ? 1 : 0);
   ctx.fillStyle = hudColor;
   ctx.font = '7px "IBM Plex Mono", monospace';
   ctx.textAlign = 'left';
@@ -485,8 +497,9 @@ export function updateVisualization(state: GameState, canvas: HTMLCanvasElement)
   }
 
   // --- Tier 1 walker name labels ---
-  for (const w of alive) {
-    const data = state.walkerData.find(d => d.walkerNumber === w.walkerNumber);
+  for (const w of state.walkers) {
+    if (!w.alive) continue;
+    const data = walkerDataMap!.get(w.walkerNumber);
     if (!data || data.tier !== 1) continue;
 
     const band = positionBand(w.position);
@@ -503,8 +516,8 @@ export function updateVisualization(state: GameState, canvas: HTMLCanvasElement)
   }
 
   // --- Allied walker rings ---
-  for (const w of alive) {
-    if (!w.isAlliedWithPlayer) continue;
+  for (const w of state.walkers) {
+    if (!w.alive || !w.isAlliedWithPlayer) continue;
 
     const band = positionBand(w.position);
     const seed = w.walkerNumber;

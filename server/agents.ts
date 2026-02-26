@@ -54,9 +54,22 @@ export function addToHistory(walkerNumber: number, role: string, content: string
     role,
     content: [{ type: contentType, text: content }],
   });
-  // Keep history bounded (last 20 messages)
+  // Keep history bounded — trim to 20 messages, always starting with a user message
+  // to preserve user/assistant alternation required by the Responses API
   if (history.length > 20) {
-    historyCache.set(walkerNumber, history.slice(-20));
+    let trimmed = history.slice(-20);
+    // Ensure first message is user role (drop leading assistant messages)
+    while (trimmed.length > 0 && trimmed[0].role === 'assistant') {
+      trimmed = trimmed.slice(1);
+    }
+    historyCache.set(walkerNumber, trimmed);
+  }
+}
+
+export function removeLastHistory(walkerNumber: number) {
+  const history = historyCache.get(walkerNumber);
+  if (history && history.length > 0) {
+    history.pop();
   }
 }
 

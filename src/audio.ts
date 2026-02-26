@@ -267,6 +267,7 @@ function startPulse() {
     gain.connect(musicGain);
     osc.start(now);
     osc.stop(now + 0.3);
+    osc.onended = () => { osc.disconnect(); lpf.disconnect(); gain.disconnect(); };
 
     // Occasional second lighter step (walking rhythm)
     if (Math.random() < 0.6) {
@@ -277,11 +278,11 @@ function startPulse() {
       osc2.frequency.exponentialRampToValueAtTime(35, now + 0.55);
       gain2.gain.setValueAtTime(vol * 0.5, now + 0.4);
       gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
-      osc2.connect(lpf);
-      lpf.connect(gain2);
+      osc2.connect(gain2);
       gain2.connect(musicGain);
       osc2.start(now + 0.4);
       osc2.stop(now + 0.65);
+      osc2.onended = () => { osc2.disconnect(); gain2.disconnect(); };
     }
   }, 833);
 }
@@ -451,9 +452,18 @@ export function playGunshot() {
     delay.connect(lpf);
     lpf.connect(echoGain);
     echoGain.connect(masterGain);
+
+    // Disconnect echo chain after last echo fades (~1.5s total)
+    setTimeout(() => { delay.disconnect(); lpf.disconnect(); echoGain.disconnect(); }, 2000);
   }
 
-  console.log('[Audio] GUNSHOT');
+  // Disconnect one-shot gunshot nodes after they finish
+  setTimeout(() => {
+    try { clickGain.disconnect(); } catch { /* */ }
+    try { blastGain.disconnect(); } catch { /* */ }
+    try { thumpGain.disconnect(); } catch { /* */ }
+    try { crackGain.disconnect(); } catch { /* */ }
+  }, 2000);
 }
 
 // ============================================================

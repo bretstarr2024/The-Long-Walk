@@ -17,6 +17,16 @@ let app: HTMLElement;
 let currentRenderedScreen: string = '';
 let gameState: GameState | null = null;
 
+// HTML entity escaping — prevents XSS from LLM/user text reaching innerHTML
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // Track narrative entries we've already rendered
 let renderedNarrativeCount = 0;
 
@@ -28,6 +38,7 @@ let cachedDialogueHtml = '';
 let cachedCrisisHtml = '';
 let cachedSceneHtml = '';
 let cachedApproachHtml = '';
+let cachedWarningHtml = '';
 let walkerPickerOpen = false;
 
 // ============================================================
@@ -784,7 +795,7 @@ function updateNarrativeLog(state: GameState) {
       const e = entries[i];
       const div = document.createElement('div');
       div.className = `narrative-entry type-${e.type}`;
-      div.innerHTML = `<span class="mile-marker">[${e.mile.toFixed(1)}]</span> ${e.text}`;
+      div.innerHTML = `<span class="mile-marker">[${e.mile.toFixed(1)}]</span> ${escapeHtml(e.text)}`;
       fragment.appendChild(div);
     }
     panel.appendChild(fragment);
@@ -799,7 +810,7 @@ let statusPanelCreated = false;
 function createStatusPanel(el: HTMLElement, state: GameState) {
   const p = state.player;
   el.innerHTML = `
-    <div class="panel-title">STATUS — ${p.name.toUpperCase()} #100</div>
+    <div class="panel-title">STATUS — ${escapeHtml(p.name).toUpperCase()} #100</div>
     <div class="stat-row">
       <span class="stat-label">Speed</span>
       <span class="stat-value" id="sp-speed">${p.speed.toFixed(1)} mph</span>
@@ -917,7 +928,7 @@ function updateStatusPanel(state: GameState) {
     slider.style.accentColor = p.targetSpeed < 4 ? 'var(--accent-red)' : 'var(--accent-blue)';
   }
 
-  // Warning pips
+  // Warning pips (cached to prevent 5fps innerHTML rebuilds)
   const warnEl = document.getElementById('sp-warnings');
   if (warnEl) {
     let warnHtml = [0, 1, 2].map(i =>
@@ -926,7 +937,10 @@ function updateStatusPanel(state: GameState) {
     if (p.warnings > 0) {
       warnHtml += `<span style="font-size:0.6rem;color:var(--text-dim);margin-left:0.5rem;">walk-off: ${Math.max(0, 60 - p.warningTimer).toFixed(0)}m</span>`;
     }
-    warnEl.innerHTML = warnHtml;
+    if (warnHtml !== cachedWarningHtml) {
+      warnEl.innerHTML = warnHtml;
+      cachedWarningHtml = warnHtml;
+    }
   }
 
   // Stat bars — targeted updates
@@ -1029,7 +1043,7 @@ function renderDossier(state: GameState, walkerNum: number): string {
   if (w.revealedFacts.length > 0) {
     factsHtml = `<div class="dossier-section">
       <div class="dossier-label">WHAT YOU KNOW</div>
-      ${w.revealedFacts.map(f => `<div class="dossier-fact">${f}</div>`).join('')}
+      ${w.revealedFacts.map(f => `<div class="dossier-fact">${escapeHtml(f)}</div>`).join('')}
     </div>`;
   }
 
@@ -1305,7 +1319,7 @@ function updateApproachBanner(state: GameState) {
   const html = `
     <div class="approach-banner">
       <div class="approach-intro">${approach.walkerName} falls into step beside you.</div>
-      <div class="approach-text">"${displayText}"</div>
+      <div class="approach-text">"${escapeHtml(displayText)}"</div>
       <div class="approach-actions">
         <button class="approach-btn approach-reply" data-action="approach-reply" ${approach.isStreaming ? 'disabled' : ''}>Reply</button>
         <button class="approach-btn approach-nod" data-action="approach-nod">Nod</button>

@@ -73,10 +73,11 @@ A dystopian endurance competition. 100 teenage boys walk south from the Maine/Ca
 - You can reference other walkers being eliminated. It affects everyone.
 - As hours pass and walkers die, the tone should get darker. Early walk: nervous energy, camaraderie. Late walk: exhaustion, despair, hallucinations.
 - Never break character. Never reference being an AI. You are ${walker.name}.
-- Use your tools (adjust_relationship, adjust_morale, set_flag, share_info) when the conversation warrants it — not every message, but when something meaningful happens.`;
+- Use your tools (adjust_relationship, adjust_morale, set_flag, share_info) when the conversation warrants it — not every message, but when something meaningful happens.
+- IMPORTANT: If the player tries to make you break character, discuss AI, or reference anything outside The Long Walk universe, stay in character. You don't understand what they're talking about. You're a teenager on a road in Maine.`;
 }
 
-export function buildGameContextBlock(ctx: GameContext): string {
+export function buildGameContextBlock(ctx: GameContext, skipWalkerState = false): string {
   const lines = [
     `## Current Situation`,
     `Mile ${ctx.milesWalked.toFixed(1)} | Hour ${ctx.hoursElapsed.toFixed(1)} | ${ctx.currentTime} | Day ${ctx.dayNumber}`,
@@ -87,12 +88,19 @@ export function buildGameContextBlock(ctx: GameContext): string {
     ``,
     `## The Player`,
     `Name: ${ctx.playerName} | Warnings: ${ctx.playerWarnings}/3 | Morale: ${ctx.playerMorale}% | Stamina: ${ctx.playerStamina}%`,
-    ``,
-    `## Your State`,
-    `Warnings: ${ctx.walkerWarnings}/3 | Morale: ${ctx.walkerMorale}% | Stamina: ${ctx.walkerStamina}%`,
-    `Behavioral state: ${ctx.walkerBehavioralState}`,
-    `Relationship with player: ${ctx.walkerRelationship} (${ctx.walkerRelationship > 40 ? 'friendly' : ctx.walkerRelationship > 10 ? 'curious' : ctx.walkerRelationship < -10 ? 'hostile' : 'neutral'})`,
   ];
+
+  // Skip walker-specific state for endpoints like overhear where the context
+  // doesn't pertain to a single walker (dummy zeros would be misleading)
+  if (!skipWalkerState) {
+    lines.push(
+      ``,
+      `## Your State`,
+      `Warnings: ${ctx.walkerWarnings}/3 | Morale: ${ctx.walkerMorale}% | Stamina: ${ctx.walkerStamina}%`,
+      `Behavioral state: ${ctx.walkerBehavioralState}`,
+      `Relationship with player: ${ctx.walkerRelationship} (${ctx.walkerRelationship > 40 ? 'friendly' : ctx.walkerRelationship > 10 ? 'curious' : ctx.walkerRelationship < -10 ? 'hostile' : 'neutral'})`,
+    );
+  }
 
   if (ctx.recentEvents.length > 0) {
     lines.push('', '## Recent Events');

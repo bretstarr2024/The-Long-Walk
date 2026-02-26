@@ -536,6 +536,8 @@ export function checkForCrisis(state: GameState, _gameMinutes: number) {
   const p = state.player;
   if (p.activeCrisis) return; // Already in a crisis
   if (!p.alive) return;
+  if (state.activeApproach) return; // Don't trigger crisis during NPC approach
+  if (state.activeScene) return;    // Don't trigger crisis during scene overlay
 
   const currentMile = Math.floor(state.world.milesWalked);
   if (currentMile <= lastCrisisCheckMile) return;

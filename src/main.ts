@@ -222,7 +222,12 @@ document.addEventListener('keydown', (e) => {
       break;
     case 'Escape':
       e.preventDefault();
-      if (state.activeDialogue) {
+      // Dismiss overlays in priority order (topmost first)
+      if (state.llmDialogue) {
+        state.llmDialogue = null;
+      } else if (state.activeApproach) {
+        state.activeApproach = null;
+      } else if (state.activeDialogue) {
         closeDialogue(state);
       } else {
         closeWalkerPicker();

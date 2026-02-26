@@ -163,10 +163,21 @@ function updatePlayerStamina(state: GameState, gameMinutes: number) {
     if (allyNearby) modifier *= 0.9;
   }
 
+  // Passive recovery at low speed: walking at exactly 4.0-4.2 mph conserves energy
+  if (p.speed >= 4.0 && p.speed <= 4.2) modifier *= 0.6;
+  else if (p.speed >= 4.0 && p.speed <= 4.5) modifier *= 0.8;
+
   // Crisis temp effect: stamina drain multiplier
   const drainMult = getActiveStaminaDrainMult(state);
   const drain = baseRate * modifier * drainMult * gameMinutes / 60;
-  p.stamina = Math.max(0, p.stamina - drain);
+
+  // Slight passive recovery when well-fed and hydrated at low speed
+  let recovery = 0;
+  if (p.speed >= 4.0 && p.speed <= 4.2 && p.hunger > 60 && p.hydration > 60) {
+    recovery = 0.05 * gameMinutes / 60; // very slow recovery when conserving
+  }
+
+  p.stamina = Math.max(0, Math.min(100, p.stamina - drain + recovery));
 
   // Collapse check
   if (p.stamina <= 0) {
@@ -273,14 +284,17 @@ function updateMorale(state: GameState, gameMinutes: number) {
     p.morale = Math.max(0, p.morale - gameMinutes * 0.02);
   }
 
-  // Willpower failure check
+  // Willpower failure: morale at 0 forces speed to drop, triggering warnings naturally
   if (p.morale <= 0 && p.alive) {
-    p.alive = false;
-    addNarrative(state,
-      'You stop walking. Not because your body failed. Because you chose to. The road stretches on without you.',
-      'elimination'
-    );
-    state.screen = 'gameover';
+    p.morale = 0;
+    // Willpower failure slows you down — the warning system handles the rest
+    if (p.speed > 3.5) {
+      addNarrative(state,
+        'Something inside you breaks. Your legs slow. You don\'t care anymore. The road doesn\'t care either.',
+        'thought'
+      );
+    }
+    p.targetSpeed = Math.min(p.targetSpeed, 3.5);
   }
 }
 
@@ -308,38 +322,34 @@ function updateClarity(state: GameState, gameMinutes: number) {
 // WARNING SYSTEM
 // ============================================================
 
+const PLAYER_WARNING_COOLDOWN = 5; // game-minutes minimum between warnings
+const PLAYER_SLOW_THRESHOLD = 0.167; // ~10 seconds below 4.0 mph triggers warning
+
 function checkPlayerWarnings(state: GameState, gameMinutes: number) {
   const p = state.player;
   if (!p.alive) return;
 
   if (p.speed < 4.0) {
-    // Accumulate slow time — warning after 10 seconds (~0.167 minutes)
-    p.warningTimer += gameMinutes;
-    if (p.warningTimer >= 0.167 && p.warnings < 3) {
-      // Slow for too long under this simple model: issue warning immediately when speed < 4
-      // (Brief says 10 continuous seconds, but we track with warningTimer)
-      // Actually let's track slow seconds separately
-    }
-  }
+    // Reset walk-off timer while slow
+    p.warningTimer = 0;
 
-  // Simplified: if speed < 4.0 for this tick, risk a warning
-  // We check each tick. If under 4.0, increment a hidden "slow counter"
-  // For simplicity: issue warning if speed < 4.0 and been slow for > 0.167 minutes total since last check
-  if (p.speed < 4.0) {
-    if (!p.flags._slowAccum) {
-      p.flags._slowStart = true;
-      (p as any)._slowAccum = 0;
-    }
-    (p as any)._slowAccum = ((p as any)._slowAccum || 0) + gameMinutes;
+    // Accumulate slow time
+    p.slowAccum += gameMinutes;
 
-    if ((p as any)._slowAccum >= 0.167) { // ~10 seconds
+    // Check cooldown since last warning
+    const minutesSinceLastWarn = (state.world.hoursElapsed - p.lastWarningTime) * 60;
+    const cooldownMet = minutesSinceLastWarn >= PLAYER_WARNING_COOLDOWN;
+
+    // Issue warning after threshold AND cooldown
+    if (p.slowAccum >= PLAYER_SLOW_THRESHOLD && p.warnings < 3 && cooldownMet) {
       issueWarning(state);
-      (p as any)._slowAccum = 0;
+      p.slowAccum = 0;
     }
   } else {
-    (p as any)._slowAccum = 0;
+    // Above 4.0 — reset slow accumulator
+    p.slowAccum = 0;
 
-    // Walk-off timer: 60 game minutes without new warning removes one
+    // Walk-off timer: 60 game minutes above 4.0 clears one warning
     if (p.warnings > 0) {
       p.warningTimer += gameMinutes;
       if (p.warningTimer >= 60) {
@@ -356,6 +366,7 @@ function issueWarning(state: GameState) {
   console.log(`[Engine] WARNING issued! ${p.warnings + 1}/3 at speed ${p.speed.toFixed(1)} mph, mile ${state.world.milesWalked.toFixed(1)}`);
   p.warnings++;
   p.warningTimer = 0;
+  p.lastWarningTime = state.world.hoursElapsed;
   p.morale = Math.max(0, p.morale - 10);
   state.lastWarningMile = state.world.milesWalked;
 

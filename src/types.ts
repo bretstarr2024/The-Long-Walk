@@ -103,7 +103,9 @@ export interface PlayerState {
   morale: number;        // 0-100
   clarity: number;       // 0-100
   warnings: number;      // 0-3
-  warningTimer: number;  // game-minutes since last warning (3600s = 60min to walk off)
+  warningTimer: number;  // game-minutes walk-off counter (60 min above 4.0 to clear a warning)
+  slowAccum: number;     // game-minutes accumulated below 4.0 mph (threshold → warning)
+  lastWarningTime: number; // game-hours when last warning was issued (cooldown enforcement)
   alive: boolean;
   position: PackPosition;
   foodCooldown: number;  // game-minutes until food can be requested

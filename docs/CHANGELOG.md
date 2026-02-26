@@ -1,5 +1,43 @@
 # Changelog
 
+## 0.4.1 — 2026-02-26
+
+Comprehensive code review sweep — security hardening, server reliability, performance optimization, and arc completeness.
+
+### Security
+- **XSS prevention**: Added `escapeHtml()` utility; applied to all innerHTML sites with LLM/user text (narrative, status, dossier, approach)
+- **CORS whitelist**: Replaced permissive `origin || '*'` with explicit allowed origins
+- **Input validation**: Walker ID range-checked (1-100) on chat endpoint
+- **Anti-jailbreak**: System prompt instructs agents to stay in character when player attempts to break immersion
+
+### Server Reliability
+- **Request-scoped effects**: `createEffectsScope()` replaces global mutable `pendingEffects` array — prevents race conditions
+- **History error rollback**: `removeLastHistory()` on agent failure prevents orphaned user messages
+- **History alternation**: Trimming preserves required user/assistant message alternation
+- **Overhear context**: `buildGameContextBlock()` skips walker state for overhear endpoint (irrelevant for two-NPC conversation)
+
+### Client Robustness
+- **Agent client timeout**: 30s `AbortSignal.timeout` on SSE fetch
+- **Configurable server URL**: `VITE_AGENT_SERVER_URL` env var (default localhost:3001)
+- **Player warning system**: Added `slowAccum`/`lastWarningTime` fields; proper 60-minute walk-off timer
+- **Pact ending fix**: `alive <= 3` check now reachable (moved before `alive <= 1` block)
+- **Crisis guards**: No crisis triggers during active approach or scene overlay
+- **Escape key priority**: Proper overlay dismiss ordering (LLM dialogue > approach > dialogue > walker picker)
+- **Overhear mile gap**: `lastOverheardMile` now set only on success, not before LLM call
+
+### Performance
+- **Canvas optimization**: `walkerDataMap` for O(1) walker lookup; inline alive checks eliminate per-frame array allocation
+- **Audio node cleanup**: Oscillators and gains disconnect via `onended` callbacks and setTimeout
+- **Warning pips cache**: HTML comparison guard prevents unnecessary innerHTML assignment
+- **Stamina rebalance**: Tuned drain/recovery rates; morale death → speed penalty instead of direct elimination
+
+### Arc Completeness
+- **All 9 Tier 1 walkers now have complete 5-phase arcs**: Added missing crisis phases (Stebbins, Baker, Parker, Scramm, Harkness) and farewell phases (Olson, Barkovitch)
+
+### Infrastructure
+- **Vite type definitions**: Added `src/vite-env.d.ts` for `import.meta.env` support
+- **Review command suite**: Generated 8 tailored code review commands in `.claude/commands/`
+
 ## 0.4.0 — 2026-02-26
 
 Character development overhaul — NPCs come alive through approaches, arcs, cinematic scenes, and meaningful relationships.

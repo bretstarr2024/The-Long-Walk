@@ -620,6 +620,16 @@ export function checkEnding(state: GameState): EndingType {
 
   if (!playerAlive) return 'collapse';
 
+  // Pact ending: strong alliance with Garraty or McVries in final 3
+  // Must check before the sole-survivor block since alive <= 3 > alive <= 1
+  if (alive <= 3 && alive > 1 && playerAlive) {
+    const garraty = getWalkerState(state, 47);
+    const mcvries = getWalkerState(state, 61);
+    if ((garraty?.alive && garraty.isAlliedWithPlayer) || (mcvries?.alive && mcvries?.isAlliedWithPlayer)) {
+      return 'pact';
+    }
+  }
+
   // Player is last walker
   if (alive <= 1 && playerAlive) {
     // Ghost ending: clarity < 5
@@ -627,13 +637,6 @@ export function checkEnding(state: GameState): EndingType {
 
     // Refusal ending: morale > 80 (nearly impossible this late)
     if (state.player.morale > 80) return 'refusal';
-
-    // Pact ending: strong alliance with Garraty or McVries, both alive in final 5
-    const garraty = getWalkerState(state, 47);
-    const mcvries = getWalkerState(state, 61);
-    if ((garraty?.alive && garraty.isAlliedWithPlayer) || (mcvries?.alive && mcvries?.isAlliedWithPlayer)) {
-      if (alive <= 3) return 'pact';
-    }
 
     return 'hollow_victory';
   }

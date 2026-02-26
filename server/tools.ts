@@ -16,8 +16,16 @@ export interface GameEffect {
   text?: string;
 }
 
-// Accumulator for effects produced during a single agent run
-export const pendingEffects: GameEffect[] = [];
+// Request-scoped effects accumulator — each request gets its own array
+// to prevent race conditions between concurrent agent calls.
+// The active scope is set per-request via createEffectsScope().
+let _activeEffects: GameEffect[] = [];
+
+export function createEffectsScope(): GameEffect[] {
+  const effects: GameEffect[] = [];
+  _activeEffects = effects;
+  return effects;
+}
 
 export const adjustRelationship = tool({
   name: 'adjust_relationship',
@@ -27,7 +35,7 @@ export const adjustRelationship = tool({
     reason: z.string().describe('Brief reason for the change'),
   }),
   execute: async ({ delta, reason }) => {
-    pendingEffects.push({ type: 'relationship', delta });
+    _activeEffects.push({ type: 'relationship', delta });
     return `Relationship shifted by ${delta > 0 ? '+' : ''}${delta}: ${reason}`;
   },
 });
@@ -39,7 +47,7 @@ export const adjustMorale = tool({
     delta: z.number().min(-5).max(5).describe('Morale change (-5 to +5)'),
   }),
   execute: async ({ delta }) => {
-    pendingEffects.push({ type: 'morale', delta });
+    _activeEffects.push({ type: 'morale', delta });
     return `Player morale ${delta > 0 ? 'boosted' : 'lowered'} by ${Math.abs(delta)}.`;
   },
 });
@@ -52,7 +60,7 @@ export const setFlag = tool({
     value: z.boolean().describe('Flag value'),
   }),
   execute: async ({ key, value }) => {
-    pendingEffects.push({ type: 'flag', key, value });
+    _activeEffects.push({ type: 'flag', key, value });
     return `Flag "${key}" set to ${value}.`;
   },
 });
@@ -64,7 +72,7 @@ export const shareInfo = tool({
     text: z.string().describe('The information to share'),
   }),
   execute: async ({ text }) => {
-    pendingEffects.push({ type: 'info', text });
+    _activeEffects.push({ type: 'info', text });
     return `Shared info: ${text}`;
   },
 });

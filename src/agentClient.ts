@@ -3,7 +3,7 @@
 // Sends messages to the server and streams responses
 // ============================================================
 
-const SERVER_URL = 'http://localhost:3001';
+const SERVER_URL = import.meta.env.VITE_AGENT_SERVER_URL || 'http://localhost:3001';
 
 export interface TokenEvent { type: 'token'; text: string }
 export interface EffectEvent { type: 'effect'; effectType: string; walkerId?: number; delta?: number; key?: string; value?: boolean; text?: string }
@@ -197,6 +197,7 @@ export async function* sendMessage(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ message, walker, gameContext }),
+    signal: AbortSignal.timeout(30000),
   });
 
   if (!res.ok || !res.body) {

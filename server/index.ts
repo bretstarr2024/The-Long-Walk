@@ -9,9 +9,9 @@ import { cors } from 'hono/cors';
 import { serve } from '@hono/node-server';
 import { Agent, run } from '@openai/agents';
 import { setDefaultOpenAIKey } from '@openai/agents';
-import { getOrCreateAgent, getHistory, addToHistory } from './agents';
+import { getOrCreateAgent, getHistory, addToHistory, removeLastHistory } from './agents';
 import { buildGameContextBlock, type WalkerProfile, type GameContext } from './prompts';
-import { pendingEffects, type GameEffect } from './tools';
+import { createEffectsScope, type GameEffect } from './tools';
 
 // --- Config ---
 const MODEL = 'gpt-5.2-chat-latest';
@@ -26,9 +26,15 @@ setDefaultOpenAIKey(apiKey);
 // --- Hono App ---
 const app = new Hono();
 
-// CORS for Vite dev server
+// CORS for Vite dev server — restrict to known origins
+const ALLOWED_ORIGINS = new Set([
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:4173',
+  'http://127.0.0.1:5173',
+]);
 app.use('*', cors({
-  origin: (origin) => origin || '*',
+  origin: (origin) => ALLOWED_ORIGINS.has(origin) ? origin : 'http://localhost:5173',
   allowMethods: ['GET', 'POST', 'OPTIONS'],
   allowHeaders: ['Content-Type'],
 }));
@@ -47,6 +53,12 @@ interface ChatRequest {
 
 app.post('/api/chat/:walkerId', async (c) => {
   const walkerId = parseInt(c.req.param('walkerId'));
+
+  // Validate walkerId
+  if (!Number.isFinite(walkerId) || walkerId < 1 || walkerId > 100) {
+    return c.json({ error: 'Invalid walkerId — must be 1-100' }, 400);
+  }
+
   const body = await c.req.json<ChatRequest>();
   const { message, walker, gameContext } = body;
 
@@ -75,11 +87,11 @@ app.post('/api/chat/:walkerId', async (c) => {
     },
   ];
 
-  // Record player message in history
+  // Record player message in history (will be rolled back on error)
   addToHistory(walkerId, 'user', message);
 
-  // Clear pending effects
-  pendingEffects.length = 0;
+  // Create request-scoped effects accumulator
+  const effects = createEffectsScope();
 
   // Stream response via SSE
   return new Response(
@@ -111,7 +123,7 @@ app.post('/api/chat/:walkerId', async (c) => {
           await result.completed;
 
           // Send any accumulated game effects from tool calls
-          for (const effect of pendingEffects) {
+          for (const effect of effects) {
             effect.walkerId = walkerId;
             send('effect', JSON.stringify(effect));
           }
@@ -125,6 +137,8 @@ app.post('/api/chat/:walkerId', async (c) => {
           controller.close();
         } catch (err: any) {
           console.error(`[Server] Agent error for walker ${walkerId}:`, err.message || err);
+          // Roll back the user message we added before the agent call
+          removeLastHistory(walkerId);
           send('error', JSON.stringify({ error: err.message || 'Agent failed' }));
           controller.close();
         }
@@ -156,7 +170,7 @@ app.post('/api/overhear', async (c) => {
     return c.json({ error: 'Missing walkerA, walkerB, gameContext, or scenePrompt' }, 400);
   }
 
-  const contextBlock = buildGameContextBlock(gameContext);
+  const contextBlock = buildGameContextBlock(gameContext, true); // skip walker state for overhear
 
   const overhearAgent = new Agent({
     name: 'Overhear_Narrator',

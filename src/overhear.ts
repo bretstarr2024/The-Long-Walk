@@ -203,7 +203,6 @@ export function checkAmbientOverhear(state: GameState): void {
 
   // Fire and forget — mark in progress to prevent overlap
   state.overhearInProgress = true;
-  state.lastOverheardMile = state.world.milesWalked;
 
   requestOverhear(profileA, profileB, gameCtx, scenePrompt)
     .then((result) => {
@@ -212,6 +211,9 @@ export function checkAmbientOverhear(state: GameState): void {
         console.log('[Overhear] LLM overhear failed:', result.error);
         return;
       }
+
+      // Only consume the mile gap on success
+      state.lastOverheardMile = state.world.milesWalked;
 
       // Parse the response into narrative entries
       addNarrative(state, 'You overhear a conversation nearby...', 'overheard');
