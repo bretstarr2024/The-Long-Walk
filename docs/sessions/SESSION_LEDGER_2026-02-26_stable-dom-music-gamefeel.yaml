@@ -1,0 +1,84 @@
+session_id: "2026-02-26-stable-dom-music-gamefeel"
+date: "2026-02-26"
+branch: "main"
+version: "0.3.0"
+prior_session: "2026-02-26-llm-fix-and-ux"
+
+build_verification:
+  client_typescript: "pass"
+  server_typescript: "pass"
+  vite_build: "pass"
+
+commits:
+  - hash: "541133f"
+    message: "feat(client): Refactor status panel and chat overlay to stable DOM pattern"
+  - hash: "5aa5670"
+    message: "feat(client): Add generative ambient music system"
+  - hash: "e2c1267"
+    message: "fix(client): Fix warning pacing and add smooth position transitions"
+  - hash: "c441739"
+    message: "refactor(server): Clean up agent server imports and streaming"
+  - hash: "ab6673a"
+    message: "chore(deps): Update dependencies"
+  - hash: "2472e70"
+    message: "docs(changelog): Add v0.3.0 — stable DOM, generative music, game feel"
+
+artifacts_updated:
+  - path: "src/ui.ts"
+    change: "Major refactor — status panel and LLM chat overlay converted to stable DOM pattern with create-once + targeted updates. Added EQ-style speed meter. Chat uses append-only messages with streaming promotion."
+  - path: "src/styles.css"
+    change: "Added speed meter CSS (.speed-meter, -bar, -peak, -danger, -target)"
+  - path: "src/main.ts"
+    change: "Removed LLM dialogue Escape handling (moved to ui.ts)"
+  - path: "src/audio.ts"
+    change: "New file — generative ambient music system replacing drone"
+  - path: "src/state.ts"
+    change: "Added audio state initialization"
+  - path: "src/types.ts"
+    change: "Added audio-related type definitions"
+  - path: "src/engine.ts"
+    change: "Fixed NPC warning backstop pacing, added position transition system with speed boost and stamina cost"
+  - path: "src/visualization.ts"
+    change: "Added smooth position animation with ease-in-out interpolation"
+  - path: "server/agents.ts"
+    change: "Cleaned up imports and streaming"
+  - path: "server/index.ts"
+    change: "Cleaned up imports and streaming"
+  - path: "docs/CHANGELOG.md"
+    change: "Added v0.3.0 entry"
+
+decisions_made:
+  - decision: "Use stable DOM pattern (create-once + targeted updates) for all interactive panels"
+    rationale: "innerHTML rebuilds every 200ms destroyed buttons mid-click. Stable DOM eliminates flicker and keeps buttons responsive."
+  - decision: "Promote streaming element in-place instead of remove+recreate"
+    rationale: "Removing streaming element and creating new message element causes 1-frame gap. In-place promotion is seamless."
+  - decision: "Replace drone with generative chord-based music"
+    rationale: "Original drone was sub-bass (55 Hz) inaudible on laptop speakers. First boost still sounded like 'a dull hum'. Full chord progression with wind and footstep pulse sounds like actual music."
+  - decision: "Position changes cost stamina and boost speed temporarily"
+    rationale: "User wanted physical feel — 'my speed should go up and I should see my bubble move'. Moving through a pack of walkers takes effort."
+  - decision: "NPC warning backstop uses gradual slowdown before hard intervention"
+    rationale: "Previous backstop force-issued warnings every tick, killing walkers instantly. Gradual slowdown gives natural warning opportunities."
+
+open_questions:
+  - "Music quality may need further tuning — current generative system is functional but could benefit from more musical variety"
+  - "Walker-initiated conversations (NPCs approach player) not yet implemented"
+  - "Position transition animation duration (2 game-minutes) may need tuning based on game speed"
+
+known_risks:
+  - "OPENAI_API_KEY required for agent server — no graceful degradation (by design)"
+  - "gpt-5.2-chat-latest model availability — if OpenAI removes/renames, server breaks"
+  - "Agent conversation history is in-memory only — lost on server restart"
+  - "Web Audio API generative music may sound different across browsers/devices"
+
+explicitly_deferred:
+  - "Persistent conversation history (database) — kept in-memory for simplicity"
+  - "Walker position drift over time — walker positions are still static"
+  - "Walker-initiated conversations — discussed but not implemented this session"
+  - "Tier 3 walker dialogue — by design, only Tier 1/2 have LLM agents"
+
+next_actions:
+  - "Playtest full game loop end-to-end (start to elimination/victory)"
+  - "Tune music intensity curve and add variety (more chord voicings, percussion at high intensity)"
+  - "Test LLM conversations with multiple Tier 1/2 walkers in sequence"
+  - "Consider walker-initiated conversations (NPCs approach player)"
+  - "Investigate mobile/tablet responsiveness"
