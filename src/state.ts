@@ -59,6 +59,7 @@ export function createWalkerState(data: WalkerData): WalkerState {
     morale: 50 + Math.random() * 40,
     clarity: 100,
     warnings: 0,
+    warningTimer: 0,
     position: data.walkingPosition,
     relationship: data.initialRelationship,
     behavioralState: 'steady',

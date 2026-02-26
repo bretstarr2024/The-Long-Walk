@@ -74,6 +74,7 @@ export interface WalkerState {
   morale: number;
   clarity: number;
   warnings: number;
+  warningTimer: number;  // game-minutes: walk-off counter (60 min to clear a warning)
   position: PackPosition;
   relationship: number;  // -100 to 100 toward player
   behavioralState: BehavioralState;
