@@ -301,13 +301,34 @@ html, body {
   color: var(--accent-amber);
 }
 
+/* --- MAIN CONTENT (Visualization + Narrative) --- */
+.game-main {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+/* --- BIRD'S EYE VISUALIZATION --- */
+.viz-panel {
+  width: 200px;
+  flex-shrink: 0;
+  background: var(--bg-primary);
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  align-items: stretch;
+}
+
+.viz-panel canvas {
+  width: 100%;
+  height: 100%;
+}
+
 /* --- NARRATIVE LOG --- */
 .narrative-panel {
   flex: 1;
   overflow-y: auto;
   padding: 1rem 1.5rem;
   background: var(--bg-primary);
-  border-bottom: 1px solid var(--border-color);
   scroll-behavior: smooth;
   min-height: 0;
 }
@@ -852,6 +873,17 @@ html, body {
    ============================================================ */
 
 @media (max-width: 900px) {
+  .game-main {
+    flex-direction: column;
+  }
+
+  .viz-panel {
+    width: 100%;
+    height: 120px;
+    border-right: none;
+    border-bottom: 1px solid var(--border-color);
+  }
+
   .game-bottom {
     grid-template-columns: 1fr;
     max-height: 60vh;

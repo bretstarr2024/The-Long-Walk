@@ -8,6 +8,7 @@ import { setPlayerSpeed, setPlayerPosition, requestFood, requestWater, formAllia
 import { getAvailableDialogues, startDialogue, selectDialogueOption, closeDialogue, getContextualLine, checkNPCDialogue } from './dialogue';
 import { getEndingText, getGameStats, EndingType } from './narrative';
 import { getRouteSegment } from './data/route';
+import { initVisualization, updateVisualization } from './visualization';
 
 let app: HTMLElement;
 let currentRenderedScreen: string = '';
@@ -397,6 +398,10 @@ function renderGame(state: GameState) {
   updateActionsPanel(state);
   updateGameControls(state);
   updateDialogueOverlay(state);
+
+  // Update bird's eye visualization
+  const canvas = document.getElementById('viz-canvas') as HTMLCanvasElement;
+  if (canvas) updateVisualization(state, canvas);
 }
 
 function createGameStructure() {
@@ -413,7 +418,12 @@ function createGameStructure() {
           <div class="header-stat">Warnings: <span id="hdr-warnings" class="value">0/3</span></div>
         </div>
       </div>
-      <div class="narrative-panel" id="narrative-panel"></div>
+      <div class="game-main">
+        <div class="viz-panel">
+          <canvas id="viz-canvas" width="200" height="500"></canvas>
+        </div>
+        <div class="narrative-panel" id="narrative-panel"></div>
+      </div>
       <div class="game-bottom">
         <div class="status-panel" id="status-panel"></div>
         <div class="walkers-panel" id="walkers-panel"></div>
@@ -423,6 +433,10 @@ function createGameStructure() {
       <div id="dialogue-container"></div>
     </div>
   `;
+
+  // Init visualization canvas
+  const canvas = document.getElementById('viz-canvas') as HTMLCanvasElement;
+  if (canvas) initVisualization(canvas);
 }
 
 // --- Header: targeted textContent updates (never blinks) ---
