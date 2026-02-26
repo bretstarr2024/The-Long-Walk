@@ -35,6 +35,14 @@ export function initAudio(): boolean {
     musicGain.gain.value = 0.4;
     musicGain.connect(masterGain);
 
+    // Prime speech synthesis voices cache
+    if (typeof speechSynthesis !== 'undefined') {
+      speechSynthesis.getVoices();
+      speechSynthesis.addEventListener('voiceschanged', () => {
+        speechSynthesis.getVoices();
+      });
+    }
+
     console.log('[Audio] Initialized');
     return true;
   } catch (e) {
@@ -502,6 +510,39 @@ export function playWarningBuzzer() {
     osc2.start(t);
     osc1.stop(t + 0.2);
     osc2.stop(t + 0.2);
+  }
+}
+
+// ============================================================
+// WARNING VOICE — spoken soldier announcement via Web Speech API
+// Plays the buzzer as an attention-getter, then speaks the text
+// ============================================================
+
+export function playWarningVoice(text: string) {
+  if (isMuted) return;
+
+  // Play buzzer first as a brief attention-getter
+  playWarningBuzzer();
+
+  // Speak the warning text after a short delay
+  if (typeof speechSynthesis !== 'undefined') {
+    setTimeout(() => {
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 0.9;
+      utterance.pitch = 0.7;
+      utterance.volume = 0.8;
+
+      // Try to find a male English voice
+      const voices = speechSynthesis.getVoices();
+      const maleEnglish = voices.find(
+        (v) => v.lang.startsWith('en') && /male/i.test(v.name),
+      );
+      if (maleEnglish) {
+        utterance.voice = maleEnglish;
+      }
+
+      speechSynthesis.speak(utterance);
+    }, 400);
   }
 }
 

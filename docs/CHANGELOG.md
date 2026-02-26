@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.6.0 — 2026-02-26
+
+Playtest-driven overhaul — 3 critical bug fixes, effort bar core mechanic, bathroom system, warning voice, The Major, and visualization reimagining.
+
+### Bug Fixes
+- **Crisis overlays auto-dismiss**: All crisis/emergency overlays expired before player could interact at high game speeds. Root cause: timer used `gameMinutes` inflated by `gameSpeed`. Converted all crisis timers to real-world seconds (15-30s range). `updateActiveCrisis()` now takes `realDeltaMs` instead of `gameMinutes`.
+- **Warning format wrong**: Changed from `"Warning. Walker #47. First warning."` to book-accurate format: `"Warning! Warning 47!"` / `"Warning! Second warning, 47!"` / `"Warning! Warning 47! Third warning, 47!"`. Updated 6 locations across engine.ts, crises.ts, and narrative.ts.
+- **"Walker #—" missing number**: Barkovitch incident scene, Olson scene, Barkovitch dance scene, and McVries choice scene all had old-format warning text — updated to book format with actual walker numbers.
+
+### New Features
+- **Effort bar**: Replaced speed slider with effort mechanic (0-100%). Speed is now a computed output: `speed = (effort/100) * maxSpeed * terrainMult`. Sweet spot at 58-68% effort minimizes stamina drain (0.5x modifier). Arrow keys adjust effort ±5. Effort-based stamina drain modifiers: >80% = 1.5x, >68% = 1.1x, <40% = 0.6x.
+- **Pee/poop system**: Added bowel tracking (fills at 60% bladder rate). Player-initiated bathroom actions: Pee costs 1 warning (resets bladder), Poop costs 2 warnings (resets bowel). Requires minimum 20 bladder/bowel. BLD stat renamed to BDR, BWL stat bar added.
+- **Warning voice audio**: Web Speech API speaks warning announcements (rate 0.9, pitch 0.7, male English voice). Buzzer plays first as attention-getter, voice speaks after 400ms delay. Falls back to buzzer-only if speech unavailable.
+- **The Major character presence**: 8 scripted appearances at miles 12 (jeep survey), 50 (helicopter flyover), 100 (scene: address), 150 (scene: Portland appearance), 200 (relayed message), 300 (jeep following closer), 350 (jeep gone), 395 (reappears near Stebbins if alive).
+
+### Visualization Overhaul
+- **Walker condition colors**: Dot color from health score (stamina + inverse pain + morale): bright white/green → amber → red → dim gray
+- **Terrain elevation strip**: Left-edge profile showing ±10 miles of terrain, color-coded (orange=uphill, blue=downhill, yellow=rough, green=flat)
+- **Weather effects**: Rain streaks, fog opacity layer, cold blue shift
+- **Night headlight cone**: Halftrack headlights illuminate a cone of road ahead
+- **Enhanced halftrack**: Rectangular body, engine heat glow, exhaust plume
+- **Walker number labels**: Tier 1 dots show `Name #N`
+- **Alliance connection lines**: Faint green dashed lines between player and allies
+- **Mile markers**: Tick marks with distance numbers along right road edge
+- **Road detail**: Center line dashes and shoulder lines
+
+### Validation Suite Updates
+- Headless simulation updated for effort system: uses effort=85 (not targetSpeed), stat floors (stamina≥50, pain≤50), adaptive effort control, crisis temp-effect removal, and warning cap to survive 400 miles
+
 ## 0.5.0 — 2026-02-26
 
 Validation suite, second-pass review sweep (15 fixes), scene overlay bugfix, and terrain variety.

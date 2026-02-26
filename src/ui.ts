@@ -4,7 +4,7 @@
 
 import { GameState, PlayerState, WalkerState, PackPosition, Reason } from './types';
 import { getNearbyWalkers, getWalkerData, getWalkersRemaining, addNarrative } from './state';
-import { setPlayerSpeed, setPlayerPosition, requestFood, requestWater, shareFood, shareWater } from './engine';
+import { setPlayerSpeed, setPlayerEffort, setPlayerPosition, requestFood, requestWater, shareFood, shareWater, playerPee, playerPoop } from './engine';
 import { startDialogue, selectDialogueOption, closeDialogue } from './dialogue';
 import { getEndingText, getGameStats, EndingType } from './narrative';
 import { getRouteSegment } from './data/route';
@@ -108,8 +108,8 @@ function setupEventDelegation() {
   app.addEventListener('input', (e: Event) => {
     if (!gameState) return;
     const target = e.target as HTMLInputElement;
-    if (target.id === 'speed-slider') {
-      setPlayerSpeed(gameState, parseInt(target.value) / 10);
+    if (target.id === 'effort-slider') {
+      setPlayerEffort(gameState, parseInt(target.value));
     }
   });
 
@@ -129,8 +129,8 @@ function handleAction(action: string, state: GameState) {
     case 'start': state.screen = 'creation'; currentRenderedScreen = ''; break;
     case 'intro-next': advanceIntro(state); break;
     case 'restart': window.location.reload(); break;
-    case 'speed-down': setPlayerSpeed(state, state.player.targetSpeed - 0.2); break;
-    case 'speed-up': setPlayerSpeed(state, state.player.targetSpeed + 0.2); break;
+    case 'effort-down': setPlayerEffort(state, state.player.effort - 5); break;
+    case 'effort-up': setPlayerEffort(state, state.player.effort + 5); break;
     case 'pos-front': changePosition(state, 'front'); break;
     case 'pos-middle': changePosition(state, 'middle'); break;
     case 'pos-back': changePosition(state, 'back'); break;
@@ -149,6 +149,8 @@ function handleAction(action: string, state: GameState) {
     case 'speed-8': state.gameSpeed = 8; break;
     case 'share-food': handleShareFood(state); break;
     case 'share-water': handleShareWater(state); break;
+    case 'pee': playerPee(state); break;
+    case 'poop': playerPoop(state); break;
     case 'scene-next': handleSceneNext(state); break;
     case 'scene-close': handleSceneClose(state); break;
     case 'approach-reply': handleApproachReply(state); break;
@@ -825,11 +827,15 @@ function createStatusPanel(el: HTMLElement, state: GameState) {
       <div class="speed-meter-danger" id="sp-meter-danger"></div>
       <div class="speed-meter-target" id="sp-meter-target"></div>
     </div>
+    <div class="stat-row">
+      <span class="stat-label">Effort</span>
+      <span class="stat-value" id="sp-effort">${p.effort}%</span>
+    </div>
     <div class="speed-control">
-      <button class="speed-btn" data-action="speed-down">◀</button>
-      <input type="range" min="0" max="70" value="${Math.round(p.targetSpeed * 10)}" id="speed-slider" style="flex:1;" />
-      <button class="speed-btn" data-action="speed-up">▶</button>
-      <span class="speed-display" id="sp-target">${p.targetSpeed.toFixed(1)}</span>
+      <button class="speed-btn" data-action="effort-down">◀</button>
+      <input type="range" min="0" max="100" value="${p.effort}" id="effort-slider" style="flex:1;" />
+      <button class="speed-btn" data-action="effort-up">▶</button>
+      <span class="speed-display" id="sp-effort-val">${p.effort}%</span>
     </div>
     <div class="warning-display" id="sp-warnings"></div>
     <div class="stat-row"><span class="stat-label" style="width:28px">STA</span><div class="stat-bar"><div class="stat-bar-fill" id="sp-bar-sta"></div></div><span class="stat-value" id="sp-val-sta" style="width:24px;text-align:right;font-size:0.7rem;"></span></div>
@@ -838,7 +844,8 @@ function createStatusPanel(el: HTMLElement, state: GameState) {
     <div class="stat-row"><span class="stat-label" style="width:28px">PAI</span><div class="stat-bar"><div class="stat-bar-fill" id="sp-bar-pai"></div></div><span class="stat-value" id="sp-val-pai" style="width:24px;text-align:right;font-size:0.7rem;"></span></div>
     <div class="stat-row"><span class="stat-label" style="width:28px">MOR</span><div class="stat-bar"><div class="stat-bar-fill" id="sp-bar-mor"></div></div><span class="stat-value" id="sp-val-mor" style="width:24px;text-align:right;font-size:0.7rem;"></span></div>
     <div class="stat-row"><span class="stat-label" style="width:28px">CLR</span><div class="stat-bar"><div class="stat-bar-fill" id="sp-bar-clr"></div></div><span class="stat-value" id="sp-val-clr" style="width:24px;text-align:right;font-size:0.7rem;"></span></div>
-    <div class="stat-row"><span class="stat-label" style="width:28px">BLD</span><div class="stat-bar"><div class="stat-bar-fill" id="sp-bar-bld"></div></div><span class="stat-value" id="sp-val-bld" style="width:24px;text-align:right;font-size:0.7rem;"></span></div>
+    <div class="stat-row"><span class="stat-label" style="width:28px">BDR</span><div class="stat-bar"><div class="stat-bar-fill" id="sp-bar-bdr"></div></div><span class="stat-value" id="sp-val-bdr" style="width:24px;text-align:right;font-size:0.7rem;"></span></div>
+    <div class="stat-row"><span class="stat-label" style="width:28px">BWL</span><div class="stat-bar"><div class="stat-bar-fill" id="sp-bar-bwl"></div></div><span class="stat-value" id="sp-val-bwl" style="width:24px;text-align:right;font-size:0.7rem;"></span></div>
     <div class="env-info">
       <div id="sp-weather"></div>
       <div id="sp-terrain"></div>
@@ -878,7 +885,7 @@ function updateStatusPanel(state: GameState) {
   // EQ-style speed meter (0-7 mph range)
   const meterPct = Math.min(100, (p.speed / 7) * 100);
   const dangerPct = (4 / 7) * 100; // 4.0 mph danger line
-  const targetPct = Math.min(100, (p.targetSpeed / 7) * 100);
+  const targetPct = Math.min(100, p.effort);
 
   const meterBar = document.getElementById('sp-meter-bar');
   if (meterBar) {
@@ -917,19 +924,24 @@ function updateStatusPanel(state: GameState) {
     targetMarker.style.left = `${targetPct}%`;
   }
 
-  // Target speed display
-  const targetEl = document.getElementById('sp-target');
-  if (targetEl) {
-    targetEl.textContent = p.targetSpeed.toFixed(1);
-    targetEl.className = `speed-display ${p.targetSpeed < 4 ? 'danger' : ''}`;
+  // Effort display
+  const effortEl = document.getElementById('sp-effort');
+  if (effortEl) {
+    effortEl.textContent = `${p.effort}%`;
+    effortEl.style.color = p.speed < 4 ? 'var(--accent-red)' : 'var(--text-primary)';
+  }
+  const effortValEl = document.getElementById('sp-effort-val');
+  if (effortValEl) {
+    effortValEl.textContent = `${p.effort}%`;
+    effortValEl.className = `speed-display ${p.speed < 4 ? 'danger' : ''}`;
   }
 
-  // Speed slider — update without replacing (only if user isn't dragging)
-  const slider = document.getElementById('speed-slider') as HTMLInputElement;
+  // Effort slider — update without replacing (only if user isn't dragging)
+  const slider = document.getElementById('effort-slider') as HTMLInputElement;
   if (slider && document.activeElement !== slider) {
-    const newVal = String(Math.round(p.targetSpeed * 10));
+    const newVal = String(p.effort);
     if (slider.value !== newVal) slider.value = newVal;
-    slider.style.accentColor = p.targetSpeed < 4 ? 'var(--accent-red)' : 'var(--accent-blue)';
+    slider.style.accentColor = p.speed < 4 ? 'var(--accent-red)' : 'var(--accent-blue)';
   }
 
   // Warning pips (cached to prevent 5fps innerHTML rebuilds)
@@ -954,7 +966,8 @@ function updateStatusPanel(state: GameState) {
   updateStatBar('pai', p.pain, true);
   updateStatBar('mor', p.morale, false);
   updateStatBar('clr', p.clarity, false);
-  updateStatBar('bld', p.bladder, true);
+  updateStatBar('bdr', p.bladder, true);
+  updateStatBar('bwl', p.bowel, true);
 
   // Environment info
   setText('sp-weather', `Weather: ${w.weather.replace('_', ' ')}`);
@@ -1157,6 +1170,12 @@ function updateActionsPanel(state: GameState) {
       Request Water ${waterDisabled ? `(${Math.ceil(p.waterCooldown)}m)` : ''}
     </button>
     ${shareHtml}
+    <button class="action-btn" data-action="pee" ${inCrisis || p.bladder < 20 ? 'disabled' : ''}>
+      Pee ${p.bladder >= 20 ? `(1 warning)` : ''}
+    </button>
+    <button class="action-btn" data-action="poop" ${inCrisis || p.bowel < 20 ? 'disabled' : ''}>
+      Poop ${p.bowel >= 20 ? `(2 warnings)` : ''}
+    </button>
     <button class="action-btn" data-action="observe" ${inCrisis ? 'disabled' : ''}>Look Around</button>
     <button class="action-btn" data-action="think" ${inCrisis ? 'disabled' : ''}>Think About Prize</button>
   `;
@@ -1374,7 +1393,7 @@ function updateCrisisOverlay(state: GameState) {
 
   const timerPct = Math.max(0, (crisis.timeRemaining / crisis.timeLimit) * 100);
   const timerColor = timerPct > 50 ? 'var(--accent-blue)' : timerPct > 20 ? 'var(--accent-amber)' : 'var(--accent-red)';
-  const timerSecs = Math.ceil(crisis.timeRemaining * 60); // game-minutes to seconds display
+  const timerSecs = Math.ceil(crisis.timeRemaining); // already in real seconds
 
   // If crisis structure already exists, just update the timer (avoids full DOM rebuild every 200ms)
   if (cachedCrisisHtml !== '' && cachedCrisisHtml === crisis.title) {

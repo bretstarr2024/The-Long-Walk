@@ -92,7 +92,7 @@ const CRISIS_DEFS: CrisisDefinition[] = [
       return {
         type: 'stumble', title: 'STUMBLE',
         description: 'Your foot catches on a crack in the road. You pitch forward. The ground rushes up.',
-        options, timeLimit: 0.5, timeRemaining: 0.5, speedOverride: 2.0,
+        options, timeLimit: 15, timeRemaining: 15, speedOverride: 2.0,
         defaultEffects: { morale: -10, warningRisk: 1.0 },
         defaultNarrative: 'You stumble. Your speed drops. The soldier\'s voice is already speaking.',
       };
@@ -132,7 +132,7 @@ const CRISIS_DEFS: CrisisDefinition[] = [
       return {
         type: 'falling_asleep', title: 'FALLING ASLEEP',
         description: 'Your eyelids are anvils. The road blurs. Your legs move on autopilot but your speed is dropping...',
-        options, timeLimit: 1.0, timeRemaining: 1.0, speedOverride: 3.5,
+        options, timeLimit: 15, timeRemaining: 15, speedOverride: 3.5,
         defaultEffects: { morale: -15, warningRisk: 1.0, speedOverride: 2.5, speedDuration: 3 },
         defaultNarrative: 'You fall asleep on your feet. The warning comes before you even know it.',
       };
@@ -172,7 +172,7 @@ const CRISIS_DEFS: CrisisDefinition[] = [
       return {
         type: 'blister_burst', title: 'BLISTER BURST',
         description: 'Something pops inside your shoe. Wet. Hot. You can feel blood pooling around your toes.',
-        options, timeLimit: 2.0, timeRemaining: 2.0,
+        options, timeLimit: 30, timeRemaining: 30,
         defaultEffects: { pain: 20, staminaDrainMult: 1.3, staminaDrainDuration: 30 },
         defaultNarrative: 'You don\'t deal with it. The blood soaks through your sock. Every step is fire.',
       };
@@ -207,7 +207,7 @@ const CRISIS_DEFS: CrisisDefinition[] = [
       return {
         type: 'cramp_lockup', title: 'CRAMP',
         description: 'A cramp seizes your calf. The muscle locks solid. Your speed plummets.',
-        options, timeLimit: 1.5, timeRemaining: 1.5, speedOverride: 3.0,
+        options, timeLimit: 20, timeRemaining: 20, speedOverride: 3.0,
         defaultEffects: { pain: 20, morale: -10, warningRisk: 1.0, speedOverride: 3.0, speedDuration: 5 },
         defaultNarrative: 'The cramp doesn\'t let go. Your speed drops. The warning comes.',
       };
@@ -245,7 +245,7 @@ const CRISIS_DEFS: CrisisDefinition[] = [
       return {
         type: 'vomiting', title: 'VOMITING',
         description: 'Your stomach heaves. Bile rises. You\'re about to lose everything in your gut.',
-        options, timeLimit: 1.0, timeRemaining: 1.0, speedOverride: 1.5,
+        options, timeLimit: 15, timeRemaining: 15, speedOverride: 1.5,
         defaultEffects: { hydration: -20, hunger: -15, stamina: -8, warningRisk: 1.0 },
         defaultNarrative: 'You vomit on the road. The soldiers don\'t look away. The warning comes.',
       };
@@ -285,7 +285,7 @@ const CRISIS_DEFS: CrisisDefinition[] = [
       return {
         type: 'panic_attack', title: 'PANIC ATTACK',
         description: 'Your heart is hammering. The road is closing in. You can\'t breathe. You can\'t think. You can\'t—',
-        options, timeLimit: 2.0, timeRemaining: 2.0,
+        options, timeLimit: 20, timeRemaining: 20,
         defaultEffects: { morale: -15, speedOverride: 3.0, speedDuration: 5 },
         defaultNarrative: 'The panic takes you. Your speed drops. Your legs feel like they belong to someone else.',
       };
@@ -325,7 +325,7 @@ const CRISIS_DEFS: CrisisDefinition[] = [
       return {
         type: 'bathroom_emergency', title: 'BATHROOM EMERGENCY',
         description: 'Your bladder is screaming. You can\'t hold it much longer. There are no stops on the Walk.',
-        options, timeLimit: 3.0, timeRemaining: 3.0, speedOverride: 3.5,
+        options, timeLimit: 30, timeRemaining: 30, speedOverride: 3.5,
         defaultEffects: { morale: -15, bladderReset: true },
         defaultNarrative: 'You can\'t hold it anymore. It happens. You don\'t stop walking. Nobody says anything.',
       };
@@ -361,7 +361,7 @@ const CRISIS_DEFS: CrisisDefinition[] = [
       return {
         type: 'hypothermia', title: 'HYPOTHERMIA',
         description: 'You can\'t stop shivering. Your fingers are numb. The cold is inside you now.',
-        options, timeLimit: 3.0, timeRemaining: 3.0,
+        options, timeLimit: 30, timeRemaining: 30,
         defaultEffects: { stamina: -20, pain: 8, staminaDrainMult: 1.5, staminaDrainDuration: 30 },
         defaultNarrative: 'The cold takes hold. Your body burns through energy trying to stay warm.',
       };
@@ -416,7 +416,7 @@ const CRISIS_DEFS: CrisisDefinition[] = [
       return {
         type: 'ally_stumble', title: `${allyName.toUpperCase()} IS STRUGGLING`,
         description: `${allyName} is faltering. Their speed is dropping. You can see it in their eyes — they're close to giving up.`,
-        options, timeLimit: 2.0, timeRemaining: 2.0,
+        options, timeLimit: 20, timeRemaining: 20,
         targetWalker: targetNum,
         defaultEffects: { morale: -10 },
         defaultNarrative: `You don't respond. ${allyName} stumbles on alone.`,
@@ -474,7 +474,7 @@ const CRISIS_DEFS: CrisisDefinition[] = [
       return {
         type: 'stranger_plea', title: `${name.toUpperCase()} NEEDS HELP`,
         description: `${name} is barely walking. They catch your eye. The look on their face — it's not quite begging. Not yet.`,
-        options, timeLimit: 3.0, timeRemaining: 3.0,
+        options, timeLimit: 30, timeRemaining: 30,
         targetWalker: targetNum,
         defaultEffects: { morale: -3 },
         defaultNarrative: `${name} fades behind you. You don't look back.`,
@@ -502,6 +502,25 @@ export function updateBladder(state: GameState, gameMinutes: number) {
   // Warning at 80
   if (p.bladder >= 80 && p.bladder - (gameMinutes / 5) * fillRate < 80) {
     addNarrative(state, 'Your bladder is insistent. Not yet an emergency. But soon.', 'thought');
+  }
+}
+
+// ============================================================
+// BOWEL SYSTEM
+// ============================================================
+
+export function updateBowel(state: GameState, gameMinutes: number) {
+  const p = state.player;
+  if (p.activeCrisis?.type === 'bathroom_emergency') return;
+
+  let fillRate = 0.6; // base: 60% of bladder rate
+  if (p.hunger > 80) fillRate = 1.2;
+  else if (p.hunger > 50) fillRate = 0.8;
+
+  p.bowel = Math.min(100, p.bowel + (gameMinutes / 5) * fillRate);
+
+  if (p.bowel >= 80 && p.bowel - (gameMinutes / 5) * fillRate < 80) {
+    addNarrative(state, 'Your stomach cramps. Not yet an emergency. But it will be.', 'thought');
   }
 }
 
@@ -575,11 +594,11 @@ export function checkForCrisis(state: GameState, _gameMinutes: number) {
 // UPDATE ACTIVE CRISIS (timer countdown)
 // ============================================================
 
-export function updateActiveCrisis(state: GameState, gameMinutes: number) {
+export function updateActiveCrisis(state: GameState, realDeltaMs: number) {
   const crisis = state.player.activeCrisis;
   if (!crisis) return;
 
-  crisis.timeRemaining -= gameMinutes;
+  crisis.timeRemaining -= realDeltaMs / 1000;
 
   if (crisis.timeRemaining <= 0) {
     timeoutCrisis(state);
@@ -667,10 +686,13 @@ function applyEffects(state: GameState, effects: CrisisEffects, targetWalker?: n
     if (p.warnings >= 3) {
       p.alive = false;
       state.screen = 'gameover';
-      addNarrative(state, `"Warning. Walker #100. Third warning." The soldiers' rifles come up.`, 'elimination');
+      addNarrative(state, `"Warning! Warning 100! Third warning, 100!" The soldiers' rifles come up.`, 'elimination');
       addNarrative(state, `Walker #100 — ${p.name} — ELIMINATED. Mile ${Math.round(state.world.milesWalked)}.`, 'elimination');
     } else {
-      addNarrative(state, `"Warning. Walker #100. Warning number ${p.warnings}."`, 'warning');
+      const warnText = p.warnings === 1
+        ? '"Warning! Warning 100!"'
+        : '"Warning! Second warning, 100!"';
+      addNarrative(state, warnText, 'warning');
       p.morale = Math.max(0, p.morale - 10);
     }
   }

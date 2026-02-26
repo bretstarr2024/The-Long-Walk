@@ -65,6 +65,13 @@ const SCRIPTED_EVENTS: GameEvent[] = [
     ],
   },
   {
+    id: 'major_survey', type: 'scripted_scene', triggerMile: 12, priority: 7, fired: false,
+    execute: (s) => [
+      entry(s, 'A black jeep rolls past the halftrack. The Major is standing in it, surveying the walkers through binoculars. The crowd roars when they see him.', 'narration'),
+      entry(s, 'He does not wave. He scans. Like a man counting inventory.', 'narration'),
+    ],
+  },
+  {
     id: 'barkovitch_incident', type: 'scripted_scene', triggerMile: 18, priority: 9, fired: false,
     triggerConditions: (s) => {
       const b = getWalkerState(s, 5);
@@ -73,7 +80,7 @@ const SCRIPTED_EVENTS: GameEvent[] = [
     presentation: 'scene',
     scenePanels: [
       { text: 'A commotion ahead. Barkovitch is in someone\'s face, needling, taunting. The other walker stumbles — distracted, furious — and his speed drops.', type: 'narration' },
-      { text: '"Warning. Walker #—" The soldier\'s voice cuts through. It happens fast after that. Barkovitch grins as the walker goes down.', type: 'warning' },
+      { text: '"Warning! Warning 22!" The soldier\'s voice cuts through. It happens fast after that. Barkovitch grins as the walker goes down.', type: 'warning' },
       { text: '"I\'ll dance on all your graves," he calls out. The hatred aimed at him is palpable. Several walkers move away. A pariah is born.', type: 'narration' },
     ],
     execute: (s) => [
@@ -87,6 +94,12 @@ const SCRIPTED_EVENTS: GameEvent[] = [
       entry(s, 'Night falls. The temperature drops. The road ahead disappears into darkness, lit only by the halftrack\'s headlights.', 'narration'),
       entry(s, 'The crowd thins. A few spectators remain, holding lanterns. Their faces are orange and strange in the flickering light.', 'crowd'),
       entry(s, 'Night walking. A different kind of hell. The body screams for sleep that will never come.', 'thought'),
+    ],
+  },
+  {
+    id: 'major_helicopter', type: 'scripted_scene', triggerMile: 50, priority: 6, fired: false,
+    execute: (s) => [
+      entry(s, 'A helicopter thunders overhead, low and aggressive. The Major\'s helicopter. A reminder that the Walk is always being watched.', 'narration'),
     ],
   },
 
@@ -103,6 +116,17 @@ const SCRIPTED_EVENTS: GameEvent[] = [
     ],
   },
   {
+    id: 'major_address', type: 'scripted_scene', triggerMile: 100, priority: 8, fired: false,
+    presentation: 'scene',
+    scenePanels: [
+      { text: 'The Major\'s jeep pulls alongside the column. He stands, ramrod straight. The crowd falls silent.', type: 'narration' },
+      { text: '"One hundred miles." His voice carries without amplification. "Remarkable endurance. The Walk thanks you." He sits. The jeep pulls ahead. That is all he says.', type: 'narration' },
+    ],
+    execute: (s) => [
+      entry(s, 'The Major addresses the walkers at the 100-mile mark.', 'narration'),
+    ],
+  },
+  {
     id: 'olson_breakdown_peak', type: 'scripted_scene', triggerMile: 105, priority: 10, fired: false,
     triggerConditions: (s) => {
       const o = getWalkerState(s, 70);
@@ -112,7 +136,7 @@ const SCRIPTED_EVENTS: GameEvent[] = [
     scenePanels: [
       { text: 'Olson is screaming now. Incoherent. He staggers, nearly falls, catches himself. The bravado, the swagger, the "I\'m gonna win" — all of it stripped away.', type: 'narration' },
       { text: 'What\'s left is a seventeen-year-old boy who is terrified to die.', type: 'narration' },
-      { text: '"Warning. Walker #70. Second warning." Olson screams at the soldiers. Obscenities. Pleas. They don\'t react.', type: 'warning' },
+      { text: '"Warning! Second warning, 70!" Olson screams at the soldiers. Obscenities. Pleas. They don\'t react.', type: 'warning' },
     ],
     execute: (s) => [
       entry(s, 'Olson has his second warning. He\'s breaking down.', 'narration'),
@@ -144,6 +168,19 @@ const SCRIPTED_EVENTS: GameEvent[] = [
     },
   },
 
+  {
+    id: 'major_portland', type: 'scripted_scene', triggerMile: 150, priority: 9, fired: false,
+    presentation: 'scene',
+    scenePanels: [
+      { text: 'Portland. The crowds are massive. The Major\'s motorcade appears, and the crowd erupts into something between worship and frenzy.', type: 'narration' },
+      { text: 'He stands on a reviewing platform, watching the walkers pass. Some walkers look up at him. Most don\'t. He is the architect of everything that is happening to you.', type: 'narration' },
+      { text: 'For a moment, you catch him looking at the back of the pack. At Stebbins. Or maybe through him.', type: 'narration' },
+    ],
+    execute: (s) => [
+      entry(s, 'The Major makes a public appearance in Portland. The crowd is a force of nature.', 'narration'),
+    ],
+  },
+
   // --- ACT 3: THE LONG DARK ---
   {
     id: 'scramm_pact', type: 'scripted_scene', triggerMile: 168, priority: 10, fired: false,
@@ -170,6 +207,12 @@ const SCRIPTED_EVENTS: GameEvent[] = [
     ],
   },
   {
+    id: 'major_message', type: 'scripted_scene', triggerMile: 200, priority: 6, fired: false,
+    execute: (s) => [
+      entry(s, 'Word passes back through the walkers: The Major sent a message. "The strong endure." That is all. No one knows what to do with it.', 'narration'),
+    ],
+  },
+  {
     id: 'barkovitch_dance', type: 'scripted_scene', triggerMile: 245, priority: 10, fired: false,
     triggerConditions: (s) => {
       const b = getWalkerState(s, 5);
@@ -181,7 +224,7 @@ const SCRIPTED_EVENTS: GameEvent[] = [
       { text: '"I\'M DANCING!" he screams. "I TOLD YOU I\'D DANCE! I\'M DANCING ON ALL YOUR GRAVES!"', type: 'narration' },
     ],
     execute: (s) => [
-      entry(s, '"Warning. Walker #5." He doesn\'t stop dancing.', 'warning'),
+      entry(s, '"Warning! Warning 5!" He doesn\'t stop dancing.', 'warning'),
     ],
   },
 
@@ -202,6 +245,13 @@ const SCRIPTED_EVENTS: GameEvent[] = [
     ],
   },
   {
+    id: 'major_proximity', type: 'scripted_scene', triggerMile: 300, priority: 7, fired: false,
+    execute: (s) => [
+      entry(s, 'The Major\'s jeep has been following closer lately. Always just behind the halftrack. You can feel his presence like a hand on the back of your neck.', 'narration'),
+      entry(s, 'He never speaks. He just watches. A man watching his machine work.', 'narration'),
+    ],
+  },
+  {
     id: 'mcvries_choice', type: 'scripted_scene', triggerMile: 348, priority: 10, fired: false,
     triggerConditions: (s) => {
       const m = getWalkerState(s, 61);
@@ -211,10 +261,27 @@ const SCRIPTED_EVENTS: GameEvent[] = [
     scenePanels: [
       { text: 'McVries slows. Not stumbling. Not failing. Just... slowing. Choosing.', type: 'narration' },
       { text: 'He sits down on the road. Cross-legged. Like a kid at a campfire. He looks up at the sky.', type: 'narration' },
-      { text: '"Warning. Walker #61. First warning." McVries doesn\'t move. His face is peaceful. A small smile — the one with the scar, the real one.', type: 'narration' },
+      { text: '"Warning! Warning 61!" McVries doesn\'t move. His face is peaceful. A small smile — the one with the scar, the real one.', type: 'narration' },
     ],
     execute: (s) => [
       entry(s, 'McVries sits down. He\'s choosing.', 'narration'),
+    ],
+  },
+  {
+    id: 'major_absence', type: 'scripted_scene', triggerMile: 350, priority: 6, fired: false,
+    execute: (s) => [
+      entry(s, 'The Major\'s jeep is gone. No helicopter. No motorcade. For the first time, you are walking without his shadow. It should feel like freedom. It feels like abandonment.', 'narration'),
+    ],
+  },
+  {
+    id: 'major_stebbins', type: 'scripted_scene', triggerMile: 395, priority: 8, fired: false,
+    triggerConditions: (s) => {
+      const st = getWalkerState(s, 88);
+      return !!st && st.alive;
+    },
+    execute: (s) => [
+      entry(s, 'The Major\'s jeep reappears. It pulls alongside Stebbins at the back. No announcement. No fanfare. Just a black vehicle pacing a lone walker.', 'narration'),
+      entry(s, 'Stebbins doesn\'t look at it. But his jaw is set. His pace quickens. Something passes between them that you can\'t read.', 'narration'),
     ],
   },
   {

@@ -16,7 +16,7 @@ import { GameState } from './types';
 import {
   initAudio, ensureResumed, startAmbientDrone, stopAmbientDrone,
   updateDroneIntensity, calculateIntensity,
-  playGunshot, playWarningBuzzer, isAudioInitialized,
+  playGunshot, playWarningBuzzer, playWarningVoice, isAudioInitialized,
 } from './audio';
 
 // ============================================================
@@ -114,7 +114,14 @@ function gameLoop(timestamp: number) {
     for (let i = prevNarrativeCount; i < state.narrativeLog.length; i++) {
       const entry = state.narrativeLog[i];
       if (entry.type === 'elimination') playGunshot();
-      else if (entry.type === 'warning') playWarningBuzzer();
+      else if (entry.type === 'warning') {
+        const match = entry.text.match(/"([^"]+)"/);
+        if (match) {
+          playWarningVoice(match[1]);
+        } else {
+          playWarningBuzzer();
+        }
+      }
     }
 
     // Update drone intensity based on game state
@@ -205,11 +212,11 @@ document.addEventListener('keydown', (e) => {
     case '4': state.gameSpeed = 8; break;
     case 'ArrowUp':
       e.preventDefault();
-      state.player.targetSpeed = Math.min(7, state.player.targetSpeed + 0.2);
+      state.player.effort = Math.min(100, state.player.effort + 5);
       break;
     case 'ArrowDown':
       e.preventDefault();
-      state.player.targetSpeed = Math.max(0, state.player.targetSpeed - 0.2);
+      state.player.effort = Math.max(0, state.player.effort - 5);
       break;
     case 'Escape':
       e.preventDefault();

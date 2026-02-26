@@ -71,13 +71,24 @@ function crowdCount(density: string): number {
   }
 }
 
-// Walker heat: maps tier + behavioral state to thermal intensity
+// Walker heat: maps condition + tier to thermal intensity
 function walkerHeat(w: WalkerState, tier: number): number {
-  let heat = tier === 1 ? 0.72 : tier === 2 ? 0.55 : 0.38;
-  if (w.behavioralState === 'struggling') heat -= 0.08;
-  if (w.behavioralState === 'breaking_down') heat -= 0.18;
-  if (w.warnings >= 2) heat -= 0.05;
-  return Math.max(0.15, heat);
+  // Health score combines stamina, inverse pain, and morale
+  const health = (w.stamina + (100 - w.pain) + w.morale) / 300;
+  let heat: number;
+  if (health > 0.7) heat = 0.75;       // bright, healthy
+  else if (health > 0.4) heat = 0.55;  // amber, struggling
+  else if (health > 0.2) heat = 0.35;  // dim red, critical
+  else heat = 0.18;                     // nearly gone
+
+  // Tier adjustments
+  if (tier === 1) heat += 0.05;
+  else if (tier === 3) heat -= 0.05;
+
+  // Warning pip reduction
+  if (w.warnings > 0) heat -= w.warnings * 0.05;
+
+  return Math.max(0.12, heat);
 }
 
 // Draw a soft radial heat blob (used with additive blending)
@@ -249,13 +260,46 @@ export function updateVisualization(state: GameState, canvas: HTMLCanvasElement)
     }
   }
 
-  // --- Halftrack: engine heat signature (hottest non-human) ---
+  // --- Halftrack: enhanced rectangular body + engine + exhaust ---
   const htY = H * 0.92;
-  // Engine core
-  drawHeatBlob(ctx, roadCenter, htY, 7, 0.82, 3);
-  // Exhaust plume trailing behind
-  drawHeatBlob(ctx, roadCenter, htY + 8, 4, 0.4, 4);
-  drawHeatBlob(ctx, roadCenter, htY + 16, 3, 0.2, 3);
+  {
+    const htW = 14;
+    const htH = 8;
+    // Rectangular body — medium heat
+    ctx.fillStyle = thermalColor(0.55, 0.5);
+    ctx.fillRect(roadCenter - htW / 2, htY - htH / 2, htW, htH);
+
+    // Hot engine blob at front (top of rectangle, toward walkers)
+    drawHeatBlob(ctx, roadCenter, htY - htH / 2, 5, 0.85, 2.5);
+
+    // Exhaust plume trailing at rear (below rectangle)
+    drawHeatBlob(ctx, roadCenter, htY + htH / 2 + 4, 4, 0.4, 4);
+    drawHeatBlob(ctx, roadCenter, htY + htH / 2 + 12, 3, 0.22, 3);
+    drawHeatBlob(ctx, roadCenter, htY + htH / 2 + 20, 2, 0.12, 2.5);
+  }
+
+  // --- Night headlight cone ---
+  if (state.world.isNight) {
+    const coneX = roadCenter;
+    const coneY = htY - 4;
+    const coneSpread = roadWidth * 0.3;
+    const coneReach = H * 0.35;
+    const grad = ctx.createRadialGradient(coneX, coneY, 2, coneX, coneY - coneReach * 0.6, coneReach);
+    grad.addColorStop(0, 'rgba(255, 240, 180, 0.12)');
+    grad.addColorStop(0.5, 'rgba(255, 240, 180, 0.04)');
+    grad.addColorStop(1, 'rgba(255, 240, 180, 0)');
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(coneX - 4, coneY);
+    ctx.lineTo(coneX - coneSpread, coneY - coneReach);
+    ctx.lineTo(coneX + coneSpread, coneY - coneReach);
+    ctx.lineTo(coneX + 4, coneY);
+    ctx.closePath();
+    ctx.fillStyle = grad;
+    ctx.fill();
+    ctx.restore();
+  }
 
   // Soldiers flanking halftrack
   for (let i = 0; i < 4; i++) {
@@ -372,6 +416,46 @@ export function updateVisualization(state: GameState, canvas: HTMLCanvasElement)
   }
 
   // ==========================================================
+  // WEATHER EFFECTS (still additive blending from Layer 2)
+  // ==========================================================
+
+  // --- Rain: animated diagonal streaks ---
+  if (state.world.weather === 'rain' || state.world.weather === 'heavy_rain') {
+    const streakCount = state.world.weather === 'heavy_rain' ? 80 : 35;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.strokeStyle = 'rgba(120, 140, 200, 0.15)';
+    ctx.lineWidth = 0.5;
+    for (let i = 0; i < streakCount; i++) {
+      const sx = seededJitter(i + 2000, 0) * 0.5 + 0.5;
+      const sy = seededJitter(i + 3000, 0) * 0.5 + 0.5;
+      const rx = sx * W;
+      const ry = ((sy * H) + frameCounter * (2 + seededJitter(i + 4000, 0) * 0.5)) % H;
+      const len = 8 + seededJitter(i + 5000, 0) * 4;
+      ctx.beginPath();
+      ctx.moveTo(rx, ry);
+      ctx.lineTo(rx - 2, ry + len);
+      ctx.stroke();
+    }
+    ctx.globalCompositeOperation = 'lighter';
+  }
+
+  // --- Fog: semi-transparent wash ---
+  if (state.world.weather === 'fog') {
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = 'rgba(180, 190, 200, 0.08)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'lighter';
+  }
+
+  // --- Cold: blue tint ---
+  if (state.world.weather === 'cold') {
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = 'rgba(80, 100, 180, 0.05)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'lighter';
+  }
+
+  // ==========================================================
   // LAYER 3: OVERLAYS (normal blending)
   // Scan lines, noise, vignette, HUD text
   // ==========================================================
@@ -388,6 +472,48 @@ export function updateVisualization(state: GameState, canvas: HTMLCanvasElement)
     ctx.fillRect(0, sy, W, 1);
   }
 
+  // --- Terrain elevation strip (left edge, ±10 miles) ---
+  {
+    const stripX = 4;
+    const stripW = 12;
+    const stripH = H * 0.6;
+    const stripY = H * 0.2;
+    const currentMile = state.world.milesWalked;
+    const mileRange = 20; // ±10 miles
+
+    // Strip background
+    ctx.fillStyle = 'rgba(10, 20, 10, 0.6)';
+    ctx.fillRect(stripX, stripY, stripW, stripH);
+
+    // Terrain coloring per pixel row
+    for (let row = 0; row < stripH; row++) {
+      const mile = currentMile - 10 + (row / stripH) * mileRange;
+      if (mile < 0 || mile > 400) continue;
+      const rowSeg = getRouteSegment(mile);
+      let color: string;
+      switch (rowSeg.terrain) {
+        case 'flat':     color = 'rgba(64, 255, 96, 0.15)'; break;
+        case 'uphill':   color = 'rgba(255, 100, 50, 0.4)'; break;
+        case 'downhill': color = 'rgba(50, 150, 255, 0.4)'; break;
+        case 'rough':    color = 'rgba(255, 200, 50, 0.3)'; break;
+        default:         color = 'rgba(64, 255, 96, 0.15)'; break;
+      }
+      ctx.fillStyle = color;
+      ctx.fillRect(stripX, stripY + row, stripW, 1);
+    }
+
+    // White marker line at current position (center of strip)
+    const centerRow = stripH / 2;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+    ctx.fillRect(stripX, stripY + centerRow - 0.5, stripW, 1);
+
+    // Label above strip
+    ctx.fillStyle = 'rgba(64, 255, 96, 0.3)';
+    ctx.font = '5px "IBM Plex Mono", monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText('ELEV', stripX, stripY - 3);
+  }
+
   // --- Vignette (darker edges) ---
   const vigGrad = ctx.createRadialGradient(W / 2, H / 2, H * 0.25, W / 2, H / 2, H * 0.7);
   vigGrad.addColorStop(0, 'rgba(0,0,0,0)');
@@ -395,7 +521,7 @@ export function updateVisualization(state: GameState, canvas: HTMLCanvasElement)
   ctx.fillStyle = vigGrad;
   ctx.fillRect(0, 0, W, H);
 
-  // --- Thin road edge indicators (very faint, like map overlay) ---
+  // --- Road shoulder lines (solid, very faint) ---
   ctx.strokeStyle = 'rgba(64, 255, 96, 0.08)';
   ctx.lineWidth = 0.5;
   ctx.beginPath();
@@ -404,6 +530,16 @@ export function updateVisualization(state: GameState, canvas: HTMLCanvasElement)
   ctx.moveTo(roadRight, 0);
   ctx.lineTo(roadRight, H);
   ctx.stroke();
+
+  // --- Road center line dashes ---
+  ctx.strokeStyle = 'rgba(64, 255, 96, 0.06)';
+  ctx.lineWidth = 0.5;
+  ctx.setLineDash([6, 12]);
+  ctx.beginPath();
+  ctx.moveTo(roadCenter, 0);
+  ctx.lineTo(roadCenter, H);
+  ctx.stroke();
+  ctx.setLineDash([]);
 
   // ==========================================================
   // LAYER 4: HUD TEXT (green monospace, like military overlay)
@@ -427,6 +563,29 @@ export function updateVisualization(state: GameState, canvas: HTMLCanvasElement)
   ctx.fillText('FRONT', W - 4, H * 0.2);
   ctx.fillText('MIDDLE', W - 4, H * 0.49);
   ctx.fillText('BACK', W - 4, H * 0.76);
+
+  // --- Mile markers (right edge, current ±1) ---
+  {
+    const currentMile = state.world.milesWalked;
+    const markerX = roadRight + 6;
+    const markerPositions = [
+      { mile: Math.floor(currentMile) - 1, yFrac: 0.7 },
+      { mile: Math.floor(currentMile),     yFrac: 0.5 },
+      { mile: Math.floor(currentMile) + 1, yFrac: 0.3 },
+    ];
+    ctx.font = '5px "IBM Plex Mono", monospace';
+    ctx.textAlign = 'left';
+    for (const mp of markerPositions) {
+      if (mp.mile < 0 || mp.mile > 400) continue;
+      const my2 = H * mp.yFrac;
+      // Tick mark
+      ctx.fillStyle = hudDim;
+      ctx.fillRect(markerX, my2 - 0.5, 4, 1);
+      // Mile number
+      ctx.fillStyle = hudDim;
+      ctx.fillText(`${mp.mile}`, markerX + 6, my2 + 2);
+    }
+  }
 
   // --- Faint horizontal zone dividers ---
   ctx.strokeStyle = 'rgba(64, 255, 96, 0.06)';
@@ -512,7 +671,7 @@ export function updateVisualization(state: GameState, canvas: HTMLCanvasElement)
     ctx.fillStyle = 'rgba(100, 220, 140, 0.6)';
     ctx.font = '6px "IBM Plex Mono", monospace';
     ctx.textAlign = 'center';
-    ctx.fillText(data.name.split(' ')[0], x, baseY - 12);
+    ctx.fillText(`${data.name.split(' ')[0]} #${w.walkerNumber}`, x, baseY - 12);
   }
 
   // --- Allied walker rings ---
@@ -531,6 +690,45 @@ export function updateVisualization(state: GameState, canvas: HTMLCanvasElement)
     ctx.beginPath();
     ctx.arc(baseX + jx, baseY + jy, 8, 0, Math.PI * 2);
     ctx.stroke();
+  }
+
+  // --- Alliance connection lines (dashed green between player and allies) ---
+  {
+    // Compute player screen Y (same logic as player label)
+    const trans = getPositionTransition();
+    let allyPy: number;
+    if (trans) {
+      const fromBand = positionBand(trans.from);
+      const toBand = positionBand(trans.to);
+      const fromY = (fromBand[0] + fromBand[1]) / 2;
+      const toY = (toBand[0] + toBand[1]) / 2;
+      const t = trans.progress < 0.5
+        ? 2 * trans.progress * trans.progress
+        : 1 - Math.pow(-2 * trans.progress + 2, 2) / 2;
+      allyPy = H * (fromY + (toY - fromY) * t);
+    } else {
+      const band = positionBand(state.player.position);
+      allyPy = H * ((band[0] + band[1]) / 2);
+    }
+    const allyPx = roadCenter;
+
+    ctx.strokeStyle = 'rgba(64, 255, 96, 0.15)';
+    ctx.lineWidth = 0.5;
+    ctx.setLineDash([2, 4]);
+    for (const w of state.walkers) {
+      if (!w.alive || !w.isAlliedWithPlayer) continue;
+      const band = positionBand(w.position);
+      const seed = w.walkerNumber;
+      const jx = seededJitter(seed, frameCounter * 0.12) * 0.5;
+      const jy = seededJitter(seed + 100, frameCounter * 0.1) * 0.5;
+      const bx = roadLeft + roadWidth * (0.15 + (seededJitter(seed * 3, 0) * 0.5 + 0.5) * 0.7);
+      const by = H * (band[0] + (band[1] - band[0]) * ((seed % 23) / 23));
+      ctx.beginPath();
+      ctx.moveTo(allyPx, allyPy);
+      ctx.lineTo(bx + jx, by + jy);
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
   }
 
   // --- Tooltip ---

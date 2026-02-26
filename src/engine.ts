@@ -6,7 +6,7 @@ import { GameState, WalkerState, NarrativeEntry, Act, HorrorTier } from './types
 import { addNarrative, getAliveWalkers, getWalkerData, getWalkersRemaining, updateCurrentTime } from './state';
 import { getRouteSegment, getCrowdPhase, AMBIENT_DESCRIPTIONS } from './data/route';
 import {
-  checkForCrisis, updateActiveCrisis, updateBladder, updateTempEffects,
+  checkForCrisis, updateActiveCrisis, updateBladder, updateBowel, updateTempEffects,
   getActiveSpeedOverride, getActiveStaminaDrainMult,
 } from './crises';
 
@@ -34,11 +34,12 @@ export function gameTick(state: GameState, realDeltaMs: number) {
   updateClarity(state, gameMinutes);
   updateCooldowns(state, gameMinutes);
 
-  // Crisis system: bladder, temp effects, active crisis timer, new crisis check
+  // Crisis system: bladder, bowel, temp effects, active crisis timer, new crisis check
   updateBladder(state, gameMinutes);
+  updateBowel(state, gameMinutes);
   updateTempEffects(state, gameMinutes);
   if (state.player.activeCrisis) {
-    updateActiveCrisis(state, gameMinutes);
+    updateActiveCrisis(state, realDeltaMs);
   } else {
     checkForCrisis(state, gameMinutes);
   }
@@ -103,12 +104,23 @@ function updatePlayerSpeed(state: GameState) {
   // Temp effect speed override (post-crisis)
   const tempSpeed = getActiveSpeedOverride(state);
   if (tempSpeed != null) {
-    p.speed = Math.min(p.targetSpeed, tempSpeed);
+    p.speed = Math.min(computeEffortSpeed(p, state), tempSpeed);
     p.speed = Math.max(0, p.speed);
     return;
   }
 
-  // Actual speed limited by stamina and pain
+  p.speed = computeEffortSpeed(p, state);
+}
+
+function computeEffortSpeed(p: import('./types').PlayerState, state: GameState): number {
+  // Terrain multiplier — uphill is harder, downhill is easier
+  const seg = getRouteSegment(state.world.milesWalked);
+  let terrainMult = 1.0;
+  if (seg.terrain === 'uphill') terrainMult = 0.75;
+  else if (seg.terrain === 'downhill') terrainMult = 1.1;
+  else if (seg.terrain === 'rough') terrainMult = 0.85;
+
+  // Max speed limited by pain and stamina
   let maxSpeed = 7;
   if (p.pain > 90) maxSpeed = 4.5;
   else if (p.pain > 70) maxSpeed = 5;
@@ -118,8 +130,15 @@ function updatePlayerSpeed(state: GameState) {
   else if (p.stamina < 25) maxSpeed = Math.min(maxSpeed, 4.2);
   else if (p.stamina < 40) maxSpeed = Math.min(maxSpeed, 5);
 
-  p.speed = Math.min(p.targetSpeed, maxSpeed);
-  p.speed = Math.max(0, p.speed);
+  // Speed = effort × maxSpeed × terrain
+  // 0% = stopped, ~60% ≈ 4.2 mph (safe threshold), 100% = maxSpeed
+  const raw = (p.effort / 100) * maxSpeed * terrainMult;
+  const speed = Math.max(0, Math.min(maxSpeed, raw));
+
+  // Update targetSpeed as intermediate for display/compat
+  p.targetSpeed = speed;
+
+  return speed;
 }
 
 // ============================================================
@@ -154,7 +173,14 @@ function updatePlayerStamina(state: GameState, gameMinutes: number) {
   if (p.hunger < 30) modifier *= 1.2;
   if (p.pain > 70) modifier *= 1.3;
   if (p.morale < 20) modifier *= 1.25;
-  if (p.speed > 5) modifier *= 1.5;
+
+  // Effort-based drain: high effort costs more, low effort conserves
+  // Sweet spot: 58-68% effort ≈ 4.06-4.76 mph — just above warning threshold
+  if (p.effort > 80) modifier *= 1.5;
+  else if (p.effort > 68) modifier *= 1.1;
+  else if (p.effort >= 58) modifier *= 0.5; // sweet spot — efficient walking
+  else if (p.effort >= 50) modifier *= 0.7; // moderate zone
+  else if (p.effort < 40) modifier *= 0.6; // barely walking, conserving
 
   // Alliance benefit
   if (p.alliances.length > 0) {
@@ -164,18 +190,14 @@ function updatePlayerStamina(state: GameState, gameMinutes: number) {
     if (allyNearby) modifier *= 0.9;
   }
 
-  // Passive recovery at low speed: walking at exactly 4.0-4.2 mph conserves energy
-  if (p.speed >= 4.0 && p.speed <= 4.2) modifier *= 0.6;
-  else if (p.speed >= 4.0 && p.speed <= 4.5) modifier *= 0.8;
-
   // Crisis temp effect: stamina drain multiplier
   const drainMult = getActiveStaminaDrainMult(state);
   const drain = baseRate * modifier * drainMult * gameMinutes / 60;
 
-  // Slight passive recovery when well-fed and hydrated at low speed
+  // Slight passive recovery when well-fed and hydrated at efficient effort
   let recovery = 0;
-  if (p.speed >= 4.0 && p.speed <= 4.2 && p.hunger > 60 && p.hydration > 60) {
-    recovery = 0.05 * gameMinutes / 60; // very slow recovery when conserving
+  if (p.effort >= 58 && p.effort <= 68 && p.hunger > 50 && p.hydration > 50) {
+    recovery = 0.08 * gameMinutes / 60; // slow recovery in the sweet spot
   }
 
   p.stamina = Math.max(0, Math.min(100, p.stamina - drain + recovery));
@@ -295,7 +317,7 @@ function updateMorale(state: GameState, gameMinutes: number) {
         'thought'
       );
     }
-    p.targetSpeed = Math.min(p.targetSpeed, 3.5);
+    p.effort = Math.min(p.effort, 30);
   }
 }
 
@@ -371,11 +393,15 @@ function issueWarning(state: GameState) {
   p.morale = Math.max(0, p.morale - 10);
   state.lastWarningMile = state.world.milesWalked;
 
-  const ordinal = p.warnings === 1 ? 'First' : p.warnings === 2 ? 'Second' : 'Third';
-  addNarrative(state,
-    `"Warning. Walker #100. ${ordinal} warning." The soldier's voice is flat. Mechanical.`,
-    'warning'
-  );
+  let announcement: string;
+  if (p.warnings === 1) {
+    announcement = '"Warning! Warning 100!" The soldier\'s voice is flat. Mechanical.';
+  } else if (p.warnings === 2) {
+    announcement = '"Warning! Second warning, 100!" The soldier\'s voice is flat. Mechanical.';
+  } else {
+    announcement = '"Warning! Warning 100! Third warning, 100!" The soldier\'s voice is flat. Mechanical.';
+  }
+  addNarrative(state, announcement, 'warning');
 
   if (p.warnings >= 3) {
     p.alive = false;
@@ -558,20 +584,19 @@ function issueNPCWarning(state: GameState, w: WalkerState) {
   const data = getWalkerData(state, w.walkerNumber);
   if (!data) return;
 
-  const ordinal = w.warnings === 1 ? 'First' : w.warnings === 2 ? 'Second' : 'Third';
+  let announcement: string;
+  if (w.warnings === 1) {
+    announcement = `"Warning! Warning ${w.walkerNumber}!"`;
+  } else if (w.warnings === 2) {
+    announcement = `"Warning! Second warning, ${w.walkerNumber}!"`;
+  } else {
+    announcement = `"Warning! Warning ${w.walkerNumber}! Third warning, ${w.walkerNumber}!"`;
+  }
 
   if (w.position === state.player.position) {
-    // Nearby: full announcement, you hear the soldier
-    addNarrative(state,
-      `"Warning. Walker #${w.walkerNumber}. ${ordinal} warning." ${data.name}.`,
-      'warning'
-    );
+    addNarrative(state, `${announcement} ${data.name}.`, 'warning');
   } else if (data.tier <= 2) {
-    // Named walkers: you catch it from a distance
-    addNarrative(state,
-      `From the ${w.position} of the pack: "Warning. Walker #${w.walkerNumber}. ${ordinal} warning." ${data.name}.`,
-      'warning'
-    );
+    addNarrative(state, `From the ${w.position} of the pack: ${announcement} ${data.name}.`, 'warning');
   }
   // Tier 3 at different position: silent (too many to narrate)
 }
@@ -772,6 +797,41 @@ function maybeAddAmbientNarrative(state: GameState) {
 
 export function setPlayerSpeed(state: GameState, speed: number) {
   state.player.targetSpeed = Math.max(0, Math.min(7, speed));
+}
+
+export function setPlayerEffort(state: GameState, effort: number) {
+  state.player.effort = Math.max(0, Math.min(100, effort));
+}
+
+export function playerPee(state: GameState): boolean {
+  const p = state.player;
+  if (p.bladder < 20) return false;
+  if (p.activeCrisis) return false;
+
+  p.bladder = 0;
+  // Issue 1 warning (must walk off over 60 game-min)
+  issueWarning(state);
+  addNarrative(state,
+    'You relieve yourself while walking. The soldier\'s voice comes immediately. You keep walking.',
+    'narration'
+  );
+  return true;
+}
+
+export function playerPoop(state: GameState): boolean {
+  const p = state.player;
+  if (p.bowel < 20) return false;
+  if (p.activeCrisis) return false;
+
+  p.bowel = 0;
+  // Issue 2 warnings
+  issueWarning(state);
+  if (p.alive) issueWarning(state);
+  addNarrative(state,
+    'You can\'t hold it. You don\'t stop walking. The warnings come. The shame is nothing compared to the alternative.',
+    'narration'
+  );
+  return true;
 }
 
 // Position transition state — for smooth animation

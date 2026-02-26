@@ -71,8 +71,8 @@ export interface ActiveCrisis {
   title: string;
   description: string;
   options: CrisisOption[];
-  timeLimit: number;           // game-minutes total
-  timeRemaining: number;       // game-minutes left
+  timeLimit: number;           // real seconds total
+  timeRemaining: number;       // real seconds left
   speedOverride?: number;      // forced speed during crisis
   defaultEffects: CrisisEffects;
   defaultNarrative: string;
@@ -95,8 +95,9 @@ export interface PlayerState {
   prize: string;
   walkerNumber: 100;
   stamina: number;       // 0-100
-  speed: number;         // current actual mph
-  targetSpeed: number;   // what the player wants
+  speed: number;         // current actual mph (calculated from effort)
+  targetSpeed: number;   // computed target from effort (intermediate)
+  effort: number;        // 0-100% player-controlled effort level
   hydration: number;     // 0-100
   hunger: number;        // 0-100
   pain: number;          // 0-100
@@ -113,6 +114,7 @@ export interface PlayerState {
   alliances: number[];   // walker_numbers of allied NPCs
   flags: Record<string, boolean>;
   bladder: number;       // 0-100
+  bowel: number;         // 0-100
   activeCrisis: ActiveCrisis | null;
   lastCrisisMile: number;
   tempEffects: TempEffect[];

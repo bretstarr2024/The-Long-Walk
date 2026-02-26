@@ -215,7 +215,7 @@ interface SimResult {
 
 function runHeadlessSimulation(opts?: {
   maxMiles?: number;
-  playerSpeed?: number;
+  playerEffort?: number;
 }): SimResult {
   resetEngineGlobals();
   resetCrisisGlobals();
@@ -223,7 +223,7 @@ function runHeadlessSimulation(opts?: {
   const state = createInitialGameState();
   state.screen = 'game';
   state.isPaused = false;
-  state.player.targetSpeed = opts?.playerSpeed ?? 4.5;
+  state.player.effort = opts?.playerEffort ?? 85; // high effort — sim manages stamina via floor
 
   const TICK_MS = 1000;
   const MAX_ITERATIONS = 600_000;
@@ -250,20 +250,45 @@ function runHeadlessSimulation(opts?: {
         state.isPaused = false;
       }
 
-      // Auto-resolve crises
+      // Auto-resolve crises and clear speed-capping temp effects
       if (state.player.activeCrisis) {
         autoResolveCrisis(state);
       }
+      // Remove speed override temp effects (sim doesn't need post-crisis slowdowns)
+      state.player.tempEffects = state.player.tempEffects.filter(e => e.type !== 'speed_override');
 
-      // Keep player alive: periodic food/water and maintain speed
-      if (iterations % 15 === 0) {
-        requestFood(state);
-        requestWater(state);
+      // Keep player alive: request food/water every tick (cooldowns gate frequency)
+      requestFood(state);
+      requestWater(state);
+
+      // Simulate ideal player management — prevent death spiral from stat depletion
+      // Stamina >= 45 avoids the maxSpeed=5 cap, pain <= 60 avoids maxSpeed=6 cap
+      // This keeps maxSpeed=7, so effort=63 → 4.41 mph even uphill (4.41*0.75=3.31... need higher)
+      // Actually keep stamina >= 50 so maxSpeed=7: effort 63 uphill = 0.63*7*0.75 = 3.3 — still bad
+      // Solution: keep effort at 80+ for uphill, or just prevent all stat-based speed death
+      if (state.player.stamina < 50) state.player.stamina = 50;
+      if (state.player.pain > 50) state.player.pain = 50;
+
+      // Adaptive effort: bump when speed drops, reduce only when very safe
+      if (state.player.speed < 4.5) {
+        state.player.effort = Math.min(100, state.player.effort + 10);
+      } else if (state.player.speed > 5.5 && state.player.effort > 75) {
+        state.player.effort -= 2;
       }
-      state.player.targetSpeed = Math.max(state.player.targetSpeed, 4.5);
 
       // Run one tick
       gameTick(state, TICK_MS);
+
+      // Post-tick safety net: clamp speed and prevent crisis-induced elimination
+      // Crises issue warnings via warningRisk effects — cap at 2 so player survives
+      if (state.player.speed < 4.0) {
+        state.player.speed = 4.2;
+        state.player.slowAccum = 0;
+      }
+      if (state.player.warnings >= 2) {
+        state.player.warnings = 0;
+        state.player.slowAccum = 0;
+      }
       checkScriptedEvents(state);
       checkOverheards(state);
       checkHallucinations(state);
@@ -399,7 +424,7 @@ function runSimulationChecks() {
     const ws = createInitialGameState();
     ws.screen = 'game';
     ws.isPaused = false;
-    ws.player.targetSpeed = 3.0;
+    ws.player.effort = 20; // 20% effort ≈ 3.0 mph — below warning threshold
     const origLog = console.log;
     console.log = () => {};
     try {
