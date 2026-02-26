@@ -10,6 +10,11 @@ import { initUI, render, setEnding, closeWalkerPicker } from './ui';
 import { closeDialogue } from './dialogue';
 import { isServerAvailable } from './agentClient';
 import { GameState } from './types';
+import {
+  initAudio, ensureResumed, startAmbientDrone, stopAmbientDrone,
+  updateDroneIntensity, calculateIntensity,
+  playGunshot, playWarningBuzzer, isAudioInitialized,
+} from './audio';
 
 // ============================================================
 // INITIALIZATION
@@ -23,6 +28,17 @@ async function init() {
   render(state);
   state.lastTickTime = performance.now();
   requestAnimationFrame(gameLoop);
+
+  // Initialize audio on first user interaction (browser autoplay policy)
+  const startAudio = () => {
+    if (!isAudioInitialized()) {
+      initAudio();
+      console.log('[Main] Audio initialized on user gesture');
+    }
+    ensureResumed();
+  };
+  document.addEventListener('click', startAudio, { once: false });
+  document.addEventListener('keydown', startAudio, { once: false });
 
   // Check LLM server availability
   const available = await isServerAvailable();
@@ -41,6 +57,7 @@ async function init() {
 
 let lastRenderTime = 0;
 const RENDER_INTERVAL = 200; // Render game screen ~5 FPS (sub-panels rebuild)
+let droneStarted = false;
 
 function gameLoop(timestamp: number) {
   const deltaMs = timestamp - state.lastTickTime;
@@ -50,6 +67,15 @@ function gameLoop(timestamp: number) {
   const cappedDelta = Math.min(deltaMs, 200);
 
   if (state.screen === 'game' && !state.isPaused && state.player.alive) {
+    // Start ambient drone when game begins
+    if (!droneStarted && isAudioInitialized()) {
+      startAmbientDrone();
+      droneStarted = true;
+    }
+
+    // Snapshot narrative count before tick to detect new events
+    const prevNarrativeCount = state.narrativeLog.length;
+
     // Run game systems every frame for smooth simulation
     gameTick(state, cappedDelta);
 
@@ -59,12 +85,36 @@ function gameLoop(timestamp: number) {
     // Check hallucinations
     checkHallucinations(state);
 
+    // Trigger sounds for new narrative entries
+    for (let i = prevNarrativeCount; i < state.narrativeLog.length; i++) {
+      const entry = state.narrativeLog[i];
+      if (entry.type === 'elimination') playGunshot();
+      else if (entry.type === 'warning') playWarningBuzzer();
+    }
+
+    // Update drone intensity based on game state
+    if (droneStarted) {
+      const intensity = calculateIntensity(
+        state.world.hoursElapsed,
+        state.eliminationCount,
+        state.world.horrorTier,
+        state.world.isNight,
+      );
+      updateDroneIntensity(intensity);
+    }
+
     // Check for ending conditions
     const ending = checkEnding(state);
     if (ending) {
       setEnding(ending);
       state.screen = 'gameover';
     }
+  }
+
+  // Stop drone on game over
+  if (state.screen === 'gameover' && droneStarted) {
+    stopAmbientDrone();
+    droneStarted = false;
   }
 
   // Throttle rendering for game screen (sub-panels rebuild their innerHTML)
@@ -85,6 +135,10 @@ function gameLoop(timestamp: number) {
 document.addEventListener('keydown', (e) => {
   if (state.screen !== 'game') return;
 
+  // Don't capture shortcuts when typing in an input field (but always allow Escape)
+  const tag = (document.activeElement as HTMLElement)?.tagName;
+  if ((tag === 'INPUT' || tag === 'TEXTAREA') && e.key !== 'Escape') return;
+
   switch (e.key) {
     case ' ':
       e.preventDefault();
@@ -103,10 +157,9 @@ document.addEventListener('keydown', (e) => {
       state.player.targetSpeed = Math.max(0, state.player.targetSpeed - 0.2);
       break;
     case 'Escape':
+      e.preventDefault();
       if (state.activeDialogue) {
         closeDialogue(state);
-      } else if (state.llmDialogue) {
-        state.llmDialogue = null;
       } else {
         closeWalkerPicker();
       }

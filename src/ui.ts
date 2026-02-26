@@ -4,12 +4,13 @@
 
 import { GameState, PlayerState, WalkerState, PackPosition, Reason } from './types';
 import { getNearbyWalkers, getWalkerData, getWalkersRemaining, addNarrative } from './state';
-import { setPlayerSpeed, setPlayerPosition, requestFood, requestWater, formAlliance } from './engine';
-import { getAvailableDialogues, startDialogue, selectDialogueOption, closeDialogue, getContextualLine, checkNPCDialogue } from './dialogue';
+import { setPlayerSpeed, setPlayerPosition, requestFood, requestWater } from './engine';
+import { startDialogue, selectDialogueOption, closeDialogue } from './dialogue';
 import { getEndingText, getGameStats, EndingType } from './narrative';
 import { getRouteSegment } from './data/route';
 import { initVisualization, updateVisualization } from './visualization';
 import { sendMessage, isServerAvailable, type WalkerProfile, type GameContextForAgent } from './agentClient';
+import { toggleMute, getIsMuted } from './audio';
 
 let app: HTMLElement;
 let currentRenderedScreen: string = '';
@@ -19,12 +20,10 @@ let gameState: GameState | null = null;
 let renderedNarrativeCount = 0;
 
 // Cache panel HTML to prevent unnecessary DOM rebuilds (fixes blinking)
-let cachedStatusHtml = '';
 let cachedWalkersHtml = '';
 let cachedActionsHtml = '';
 let cachedControlsHtml = '';
 let cachedDialogueHtml = '';
-let cachedLlmChatHtml = '';
 let walkerPickerOpen = false;
 
 // ============================================================
@@ -99,9 +98,13 @@ function setupEventDelegation() {
       e.preventDefault();
       handleSendChat(gameState);
     }
-    if (e.key === 'Escape' && walkerPickerOpen) {
-      walkerPickerOpen = false;
-      cachedActionsHtml = '';
+    if (e.key === 'Escape') {
+      if (gameState?.llmDialogue) {
+        closeLLMDialogue(gameState);
+      } else if (walkerPickerOpen) {
+        walkerPickerOpen = false;
+        cachedActionsHtml = '';
+      }
     }
   });
 }
@@ -124,6 +127,7 @@ function handleAction(action: string, state: GameState) {
     case 'observe': handleObserve(state); break;
     case 'think': handleThink(state); break;
     case 'pause': state.isPaused = !state.isPaused; break;
+    case 'mute': toggleMute(); cachedControlsHtml = ''; break;
     case 'speed-1': state.gameSpeed = 1; break;
     case 'speed-2': state.gameSpeed = 2; break;
     case 'speed-4': state.gameSpeed = 4; break;
@@ -136,7 +140,6 @@ function changePosition(state: GameState, pos: PackPosition) {
   const prev = state.player.position;
   setPlayerPosition(state, pos);
   walkerPickerOpen = false;
-  cachedStatusHtml = '';
   cachedWalkersHtml = '';
   cachedActionsHtml = '';
   const labels: Record<string, string> = {
@@ -162,14 +165,12 @@ function handleWalkerPicked(state: GameState, walkerNumber: number) {
   const data = getWalkerData(state, walkerNumber);
   if (!data) return;
 
-  // Alliance check
-  if (w.relationship >= 60 && !w.isAlliedWithPlayer && state.player.alliances.length < 2) {
-    formAlliance(state, walkerNumber);
-    return;
-  }
-
   // Tier 1/2 + server online → LLM chat
-  if (state.llmAvailable && data.tier <= 2 && !state.llmDialogue) {
+  if (state.llmAvailable && data.tier <= 2) {
+    // Close existing chat if open (switching to new walker)
+    if (state.llmDialogue) {
+      state.llmDialogue = null;
+    }
     state.llmDialogue = {
       walkerId: walkerNumber,
       walkerName: data.name,
@@ -177,17 +178,24 @@ function handleWalkerPicked(state: GameState, walkerNumber: number) {
       isStreaming: false,
       streamBuffer: '',
     };
-    cachedLlmChatHtml = '';
     console.log('[Talk] LLM chat opened with', data.name, '#' + walkerNumber);
     return;
   }
 
-  // Tier 3 or server offline → contextual line
-  const line = getContextualLine(state, w);
-  if (line) {
-    addNarrative(state, `${data.name}: ${line}`, 'dialogue');
-    w.relationship = Math.min(100, w.relationship + 1);
+  // Tier 1/2 server offline → can't talk
+  if (data.tier <= 2 && !state.llmAvailable) {
+    addNarrative(state, `You try to catch ${data.name}'s attention, but they don't seem to hear you over the wind.`, 'narration');
+    return;
   }
+
+  // Tier 3 → they're background, brief non-dialogue narration
+  const dismissals = [
+    `${data.name} glances at you but keeps walking.`,
+    `${data.name} nods once and looks away.`,
+    `${data.name} doesn't seem interested in talking.`,
+    `You fall into step beside ${data.name}, but neither of you speaks.`,
+  ];
+  addNarrative(state, dismissals[Math.floor(Math.random() * dismissals.length)], 'narration');
 }
 
 export function closeWalkerPicker() {
@@ -201,7 +209,6 @@ function closeLLMDialogue(state: GameState) {
   if (!state.llmDialogue) return;
   const name = state.llmDialogue.walkerName;
   state.llmDialogue = null;
-  cachedLlmChatHtml = '';
   addNarrative(state, `You stop talking to ${name} and focus on walking.`, 'narration');
 }
 
@@ -271,7 +278,6 @@ async function handleSendChat(state: GameState) {
   dlg.messages.push({ role: 'player', text: message });
   dlg.isStreaming = true;
   dlg.streamBuffer = '';
-  cachedLlmChatHtml = ''; // force re-render
 
   const walkerProfile = buildWalkerProfile(state, dlg.walkerId);
   const gameCtx = buildGameContext(state, dlg.walkerId);
@@ -283,7 +289,7 @@ async function handleSendChat(state: GameState) {
       switch (event.type) {
         case 'token':
           dlg.streamBuffer += event.text;
-          cachedLlmChatHtml = ''; // force re-render for streaming text
+          // Streaming text is updated by updateLLMChatOverlay on next render tick
           break;
 
         case 'effect':
@@ -294,7 +300,6 @@ async function handleSendChat(state: GameState) {
           dlg.messages.push({ role: 'walker', text: dlg.streamBuffer || event.text });
           dlg.streamBuffer = '';
           dlg.isStreaming = false;
-          cachedLlmChatHtml = '';
           // Add to narrative log
           addNarrative(state, `${dlg.walkerName}: ${event.text}`, 'dialogue');
           break;
@@ -302,15 +307,22 @@ async function handleSendChat(state: GameState) {
         case 'error':
           dlg.isStreaming = false;
           dlg.messages.push({ role: 'walker', text: `[Connection lost: ${event.error}]` });
-          cachedLlmChatHtml = '';
           break;
       }
+    }
+
+    // Safety reset: if stream ended without a done/error event, finalize
+    if (state.llmDialogue && dlg.isStreaming) {
+      if (dlg.streamBuffer) {
+        dlg.messages.push({ role: 'walker', text: dlg.streamBuffer });
+        dlg.streamBuffer = '';
+      }
+      dlg.isStreaming = false;
     }
   } catch (err: any) {
     if (state.llmDialogue) {
       dlg.isStreaming = false;
       dlg.messages.push({ role: 'walker', text: `[Error: ${err.message || 'Connection failed'}]` });
-      cachedLlmChatHtml = '';
     }
   }
 }
@@ -568,18 +580,14 @@ function renderIntro(state: GameState) {
 let gameStructureCreated = false;
 
 function renderGame(state: GameState) {
-  // Check for NPC-initiated dialogue
-  if (!state.activeDialogue && !state.isPaused) {
-    const nodeId = checkNPCDialogue(state);
-    if (nodeId) startDialogue(state, nodeId);
-  }
+  // NPC-initiated scripted dialogue disabled — LLM agents or nothing.
 
   if (!gameStructureCreated) {
     createGameStructure();
     gameStructureCreated = true;
     currentRenderedScreen = 'game';
     // Reset caches so first update always applies
-    cachedStatusHtml = '';
+    statusPanelCreated = false;
     cachedWalkersHtml = '';
     cachedActionsHtml = '';
     cachedControlsHtml = '';
@@ -616,7 +624,7 @@ function createGameStructure() {
       </div>
       <div class="game-main">
         <div class="viz-panel">
-          <canvas id="viz-canvas" width="200" height="500"></canvas>
+          <canvas id="viz-canvas" width="350" height="600"></canvas>
         </div>
         <div class="narrative-panel" id="narrative-panel"></div>
       </div>
@@ -684,70 +692,178 @@ function updateNarrativeLog(state: GameState) {
   }
 }
 
-// --- Status panel: cached innerHTML (only rebuilds when values change) ---
-function updateStatusPanel(state: GameState) {
-  const el = document.getElementById('status-panel');
-  if (!el) return;
+// --- Status panel: create once, update via targeted DOM ops ---
+let statusPanelCreated = false;
 
+function createStatusPanel(el: HTMLElement, state: GameState) {
   const p = state.player;
-  const w = state.world;
-
-  const html = `
+  el.innerHTML = `
     <div class="panel-title">STATUS — ${p.name.toUpperCase()} #100</div>
     <div class="stat-row">
       <span class="stat-label">Speed</span>
-      <span class="stat-value" style="color: ${p.speed < 4 ? 'var(--accent-red)' : p.speed < 4.3 ? 'var(--accent-amber)' : 'var(--text-primary)'}">${p.speed.toFixed(1)} mph</span>
+      <span class="stat-value" id="sp-speed">${p.speed.toFixed(1)} mph</span>
+    </div>
+    <div class="speed-meter" id="sp-meter">
+      <div class="speed-meter-bar" id="sp-meter-bar"></div>
+      <div class="speed-meter-peak" id="sp-meter-peak"></div>
+      <div class="speed-meter-danger" id="sp-meter-danger"></div>
+      <div class="speed-meter-target" id="sp-meter-target"></div>
     </div>
     <div class="speed-control">
       <button class="speed-btn" data-action="speed-down">◀</button>
-      <input type="range" min="0" max="70" value="${Math.round(p.targetSpeed * 10)}" id="speed-slider" style="flex:1; accent-color: ${p.targetSpeed < 4 ? 'var(--accent-red)' : 'var(--accent-blue)'};" />
+      <input type="range" min="0" max="70" value="${Math.round(p.targetSpeed * 10)}" id="speed-slider" style="flex:1;" />
       <button class="speed-btn" data-action="speed-up">▶</button>
-      <span class="speed-display ${p.targetSpeed < 4 ? 'danger' : ''}">${p.targetSpeed.toFixed(1)}</span>
+      <span class="speed-display" id="sp-target">${p.targetSpeed.toFixed(1)}</span>
     </div>
-    <div class="warning-display">
-      ${[0, 1, 2].map(i => `<div class="warning-pip ${i < p.warnings ? 'active' : ''}">${i < p.warnings ? '!' : ''}</div>`).join('')}
-      ${p.warnings > 0 ? `<span style="font-size:0.6rem;color:var(--text-dim);margin-left:0.5rem;">walk-off: ${Math.max(0, 60 - p.warningTimer).toFixed(0)}m</span>` : ''}
-    </div>
-    ${statBar('STA', p.stamina)}
-    ${statBar('HYD', p.hydration)}
-    ${statBar('HUN', p.hunger)}
-    ${statBar('PAI', p.pain, true)}
-    ${statBar('MOR', p.morale)}
-    ${statBar('CLR', p.clarity)}
+    <div class="warning-display" id="sp-warnings"></div>
+    <div class="stat-row"><span class="stat-label" style="width:28px">STA</span><div class="stat-bar"><div class="stat-bar-fill" id="sp-bar-sta"></div></div><span class="stat-value" id="sp-val-sta" style="width:24px;text-align:right;font-size:0.7rem;"></span></div>
+    <div class="stat-row"><span class="stat-label" style="width:28px">HYD</span><div class="stat-bar"><div class="stat-bar-fill" id="sp-bar-hyd"></div></div><span class="stat-value" id="sp-val-hyd" style="width:24px;text-align:right;font-size:0.7rem;"></span></div>
+    <div class="stat-row"><span class="stat-label" style="width:28px">HUN</span><div class="stat-bar"><div class="stat-bar-fill" id="sp-bar-hun"></div></div><span class="stat-value" id="sp-val-hun" style="width:24px;text-align:right;font-size:0.7rem;"></span></div>
+    <div class="stat-row"><span class="stat-label" style="width:28px">PAI</span><div class="stat-bar"><div class="stat-bar-fill" id="sp-bar-pai"></div></div><span class="stat-value" id="sp-val-pai" style="width:24px;text-align:right;font-size:0.7rem;"></span></div>
+    <div class="stat-row"><span class="stat-label" style="width:28px">MOR</span><div class="stat-bar"><div class="stat-bar-fill" id="sp-bar-mor"></div></div><span class="stat-value" id="sp-val-mor" style="width:24px;text-align:right;font-size:0.7rem;"></span></div>
+    <div class="stat-row"><span class="stat-label" style="width:28px">CLR</span><div class="stat-bar"><div class="stat-bar-fill" id="sp-bar-clr"></div></div><span class="stat-value" id="sp-val-clr" style="width:24px;text-align:right;font-size:0.7rem;"></span></div>
     <div class="env-info">
-      <div>Weather: ${w.weather.replace('_', ' ')}</div>
-      <div>Terrain: ${w.terrain}</div>
-      <div>Crowd: ${w.crowdMood}</div>
-      <div>Act: ${w.currentAct} | Horror: T${w.horrorTier}</div>
+      <div id="sp-weather"></div>
+      <div id="sp-terrain"></div>
+      <div id="sp-crowd"></div>
+      <div id="sp-act"></div>
     </div>
     <div style="margin-top:0.5rem;">
       <div class="panel-title">POSITION</div>
       <div style="display:flex;gap:0.3rem;">
-        ${(['front', 'middle', 'back'] as PackPosition[]).map(pos =>
-          `<button class="speed-btn" style="flex:1;font-size:0.6rem;${p.position === pos ? 'border-color:var(--accent-blue);color:var(--accent-blue);' : ''}" data-action="pos-${pos}">${pos}</button>`
-        ).join('')}
+        <button class="speed-btn" style="flex:1;font-size:0.6rem;" data-action="pos-front" id="sp-pos-front">front</button>
+        <button class="speed-btn" style="flex:1;font-size:0.6rem;" data-action="pos-middle" id="sp-pos-middle">middle</button>
+        <button class="speed-btn" style="flex:1;font-size:0.6rem;" data-action="pos-back" id="sp-pos-back">back</button>
       </div>
     </div>
   `;
+  statusPanelCreated = true;
+}
 
-  if (html !== cachedStatusHtml) {
-    el.innerHTML = html;
-    cachedStatusHtml = html;
+function updateStatusPanel(state: GameState) {
+  const el = document.getElementById('status-panel');
+  if (!el) return;
+
+  if (!statusPanelCreated) {
+    createStatusPanel(el, state);
+  }
+
+  const p = state.player;
+  const w = state.world;
+
+  // Speed display
+  const speedEl = document.getElementById('sp-speed');
+  if (speedEl) {
+    speedEl.textContent = `${p.speed.toFixed(1)} mph`;
+    speedEl.style.color = p.speed < 4 ? 'var(--accent-red)' : p.speed < 4.3 ? 'var(--accent-amber)' : 'var(--text-primary)';
+  }
+
+  // EQ-style speed meter (0-7 mph range)
+  const meterPct = Math.min(100, (p.speed / 7) * 100);
+  const dangerPct = (4 / 7) * 100; // 4.0 mph danger line
+  const targetPct = Math.min(100, (p.targetSpeed / 7) * 100);
+
+  const meterBar = document.getElementById('sp-meter-bar');
+  if (meterBar) {
+    meterBar.style.width = `${meterPct}%`;
+    // Color: green above 4.0, amber near 4.0, red below
+    meterBar.style.background = p.speed < 4
+      ? 'var(--accent-red)'
+      : p.speed < 4.3
+      ? 'linear-gradient(90deg, var(--accent-amber), var(--accent-amber))'
+      : 'linear-gradient(90deg, #0a4, #0f6)';
+    // Glow effect for dynamic feel
+    meterBar.style.boxShadow = p.speed < 4
+      ? '0 0 8px var(--accent-red)'
+      : '0 0 4px rgba(0,255,100,0.3)';
+  }
+
+  // Peak hold indicator (slowly falls)
+  const peakEl = document.getElementById('sp-meter-peak');
+  if (peakEl) {
+    const currentPeakLeft = parseFloat(peakEl.style.left || '0');
+    const newPeak = meterPct;
+    // Peak rises instantly, falls slowly
+    const displayPeak = newPeak > currentPeakLeft ? newPeak : Math.max(newPeak, currentPeakLeft - 0.3);
+    peakEl.style.left = `${displayPeak}%`;
+  }
+
+  // Danger line at 4.0 mph
+  const dangerEl = document.getElementById('sp-meter-danger');
+  if (dangerEl) {
+    dangerEl.style.left = `${dangerPct}%`;
+  }
+
+  // Target speed indicator
+  const targetMarker = document.getElementById('sp-meter-target');
+  if (targetMarker) {
+    targetMarker.style.left = `${targetPct}%`;
+  }
+
+  // Target speed display
+  const targetEl = document.getElementById('sp-target');
+  if (targetEl) {
+    targetEl.textContent = p.targetSpeed.toFixed(1);
+    targetEl.className = `speed-display ${p.targetSpeed < 4 ? 'danger' : ''}`;
+  }
+
+  // Speed slider — update without replacing (only if user isn't dragging)
+  const slider = document.getElementById('speed-slider') as HTMLInputElement;
+  if (slider && document.activeElement !== slider) {
+    const newVal = String(Math.round(p.targetSpeed * 10));
+    if (slider.value !== newVal) slider.value = newVal;
+    slider.style.accentColor = p.targetSpeed < 4 ? 'var(--accent-red)' : 'var(--accent-blue)';
+  }
+
+  // Warning pips
+  const warnEl = document.getElementById('sp-warnings');
+  if (warnEl) {
+    let warnHtml = [0, 1, 2].map(i =>
+      `<div class="warning-pip ${i < p.warnings ? 'active' : ''}">${i < p.warnings ? '!' : ''}</div>`
+    ).join('');
+    if (p.warnings > 0) {
+      warnHtml += `<span style="font-size:0.6rem;color:var(--text-dim);margin-left:0.5rem;">walk-off: ${Math.max(0, 60 - p.warningTimer).toFixed(0)}m</span>`;
+    }
+    warnEl.innerHTML = warnHtml;
+  }
+
+  // Stat bars — targeted updates
+  updateStatBar('sta', p.stamina, false);
+  updateStatBar('hyd', p.hydration, false);
+  updateStatBar('hun', p.hunger, false);
+  updateStatBar('pai', p.pain, true);
+  updateStatBar('mor', p.morale, false);
+  updateStatBar('clr', p.clarity, false);
+
+  // Environment info
+  setText('sp-weather', `Weather: ${w.weather.replace('_', ' ')}`);
+  setText('sp-terrain', `Terrain: ${w.terrain}`);
+  setText('sp-crowd', `Crowd: ${w.crowdMood}`);
+  setText('sp-act', `Act: ${w.currentAct} | Horror: T${w.horrorTier}`);
+
+  // Position buttons — update active state without rebuilding
+  for (const pos of ['front', 'middle', 'back'] as PackPosition[]) {
+    const btn = document.getElementById(`sp-pos-${pos}`);
+    if (btn) {
+      const isActive = p.position === pos;
+      btn.style.borderColor = isActive ? 'var(--accent-blue)' : '';
+      btn.style.color = isActive ? 'var(--accent-blue)' : '';
+    }
   }
 }
 
-function statBar(label: string, value: number, inverted = false): string {
+function updateStatBar(id: string, value: number, inverted: boolean) {
   const pct = Math.max(0, Math.min(100, value));
   const colorClass = inverted
     ? (pct > 70 ? 'danger' : pct > 40 ? 'caution' : 'good')
     : (pct > 60 ? 'good' : pct > 30 ? 'caution' : 'danger');
-  return `
-    <div class="stat-row">
-      <span class="stat-label" style="width:28px">${label}</span>
-      <div class="stat-bar"><div class="stat-bar-fill ${colorClass}" style="width:${pct}%"></div></div>
-      <span class="stat-value" style="width:24px;text-align:right;font-size:0.7rem;">${Math.round(pct)}</span>
-    </div>
-  `;
+  const bar = document.getElementById(`sp-bar-${id}`) as HTMLElement;
+  if (bar) {
+    bar.style.width = `${pct}%`;
+    bar.className = `stat-bar-fill ${colorClass}`;
+  }
+  const val = document.getElementById(`sp-val-${id}`);
+  if (val) val.textContent = String(Math.round(pct));
 }
 
 // --- Walkers panel: cached ---
@@ -854,11 +970,13 @@ function updateGameControls(state: GameState) {
   const el = document.getElementById('game-controls');
   if (!el) return;
 
+  const muted = getIsMuted();
   const html = `
     ${[1, 2, 4, 8].map(s =>
       `<button class="game-speed-btn ${state.gameSpeed === s ? 'active' : ''}" data-action="speed-${s}">${s}x</button>`
     ).join('')}
     <button class="pause-btn ${state.isPaused ? 'paused' : ''}" data-action="pause">${state.isPaused ? 'PAUSED' : 'PAUSE'}</button>
+    <button class="mute-btn ${muted ? 'muted' : ''}" data-action="mute">${muted ? 'UNMUTE' : 'MUTE'}</button>
   `;
 
   if (html !== cachedControlsHtml) {
@@ -907,80 +1025,165 @@ function updateDialogueOverlay(state: GameState) {
   }
 }
 
-// --- LLM Chat overlay ---
-function updateLLMChatOverlay(state: GameState) {
-  const container = document.getElementById('llm-chat-container');
-  if (!container) return;
+// --- LLM Chat overlay (stable DOM — create once, append-only messages) ---
+let llmOverlayCreated = false;
+let llmOverlayWalkerId = -1;
+let renderedChatMsgCount = 0;
+let llmStreamingShown = false;
 
-  if (!state.llmDialogue) {
-    if (cachedLlmChatHtml !== '') {
-      container.innerHTML = '';
-      cachedLlmChatHtml = '';
-    }
-    return;
-  }
-
-  const dlg = state.llmDialogue;
-  const w = state.walkers.find(ws => ws.walkerNumber === dlg.walkerId);
+function createLLMOverlay(container: HTMLElement, dlg: GameState['llmDialogue']) {
+  if (!dlg) return;
+  const w = gameState?.walkers.find(ws => ws.walkerNumber === dlg.walkerId);
   const relLabel = !w ? '' : w.relationship > 40 ? 'friendly' : w.relationship > 10 ? 'curious' : w.relationship < -10 ? 'hostile' : 'neutral';
 
-  const messagesHtml = dlg.messages.map(m =>
-    `<div class="chat-message chat-${m.role}">
-      <span class="chat-sender">${m.role === 'player' ? 'You' : dlg.walkerName}</span>
-      <span class="chat-text">${m.text}</span>
-    </div>`
-  ).join('');
-
-  const streamingHtml = dlg.isStreaming && dlg.streamBuffer
-    ? `<div class="chat-message chat-walker streaming">
-        <span class="chat-sender">${dlg.walkerName}</span>
-        <span class="chat-text">${dlg.streamBuffer}</span>
-      </div>`
-    : dlg.isStreaming
-    ? `<div class="chat-message chat-walker streaming">
-        <span class="chat-sender">${dlg.walkerName}</span>
-        <span class="chat-text"><span class="typing-dots">...</span></span>
-      </div>`
-    : '';
-
-  const html = `
-    <div class="dialogue-overlay">
+  container.innerHTML = `
+    <div class="dialogue-overlay" id="llm-overlay-bg">
       <div class="llm-chat-box">
         <div class="llm-chat-header">
           <div>
-            <span class="dialogue-speaker">${dlg.walkerName} (#${dlg.walkerId})</span>
-            <span class="walker-disposition ${relLabel}" style="margin-left:0.5rem;">${relLabel}</span>
+            <span class="dialogue-speaker" id="llm-speaker">${dlg.walkerName} (#${dlg.walkerId})</span>
+            <span class="walker-disposition ${relLabel}" id="llm-rel-label" style="margin-left:0.5rem;">${relLabel}</span>
           </div>
           <button class="speed-btn" data-action="close-chat" style="font-size:0.8rem;width:auto;padding:0.2rem 0.5rem;">X</button>
         </div>
         <div class="llm-chat-messages" id="llm-chat-messages">
-          ${dlg.messages.length === 0 && !dlg.isStreaming
-            ? '<div class="chat-hint">Say something to start a conversation...</div>'
-            : ''}
-          ${messagesHtml}
-          ${streamingHtml}
+          <div class="chat-hint" id="llm-chat-hint">Say something to start a conversation...</div>
         </div>
         <div class="llm-chat-input-row">
-          <input type="text" id="llm-chat-input" class="llm-chat-input" placeholder="Type a message..." autocomplete="off" ${dlg.isStreaming ? 'disabled' : ''} />
-          <button class="action-btn" data-action="send-chat" ${dlg.isStreaming ? 'disabled' : ''} style="padding:0.5rem 1rem;">Send</button>
+          <input type="text" id="llm-chat-input" class="llm-chat-input" placeholder="Type a message..." autocomplete="off" />
+          <button class="action-btn" data-action="send-chat" id="llm-send-btn" style="padding:0.5rem 1rem;">Send</button>
         </div>
       </div>
     </div>
   `;
 
-  if (html !== cachedLlmChatHtml) {
-    container.innerHTML = html;
-    cachedLlmChatHtml = html;
+  // Click overlay background to close chat
+  const bg = document.getElementById('llm-overlay-bg');
+  if (bg) {
+    bg.addEventListener('click', (e) => {
+      if (e.target === bg && gameState) {
+        closeLLMDialogue(gameState);
+      }
+    });
+  }
 
-    // Auto-scroll messages
-    const msgsEl = document.getElementById('llm-chat-messages');
-    if (msgsEl) msgsEl.scrollTop = msgsEl.scrollHeight;
+  llmOverlayCreated = true;
+  llmOverlayWalkerId = dlg.walkerId;
+  renderedChatMsgCount = 0;
+  llmStreamingShown = false;
 
-    // Focus input
-    if (!dlg.isStreaming) {
-      const inp = document.getElementById('llm-chat-input') as HTMLInputElement;
-      if (inp) inp.focus();
+  // Focus input
+  const inp = document.getElementById('llm-chat-input') as HTMLInputElement;
+  if (inp) inp.focus();
+}
+
+function updateLLMChatOverlay(state: GameState) {
+  const container = document.getElementById('llm-chat-container');
+  if (!container) return;
+
+  // No dialogue → tear down overlay
+  if (!state.llmDialogue) {
+    if (llmOverlayCreated) {
+      container.innerHTML = '';
+      llmOverlayCreated = false;
+      llmOverlayWalkerId = -1;
+      renderedChatMsgCount = 0;
+      llmStreamingShown = false;
     }
+    return;
+  }
+
+  const dlg = state.llmDialogue;
+
+  // Different walker or overlay not created → create fresh
+  if (!llmOverlayCreated || llmOverlayWalkerId !== dlg.walkerId) {
+    createLLMOverlay(container, dlg);
+  }
+
+  const msgsEl = document.getElementById('llm-chat-messages');
+  if (!msgsEl) return;
+
+  // Hide hint once we have messages or streaming
+  const hint = document.getElementById('llm-chat-hint');
+  if (hint) {
+    hint.style.display = (dlg.messages.length === 0 && !dlg.isStreaming) ? '' : 'none';
+  }
+
+  // Append new messages (append-only — never rebuild)
+  // Check if streaming element can be promoted to a permanent message
+  let streamEl = msgsEl.querySelector('.streaming') as HTMLElement | null;
+
+  while (renderedChatMsgCount < dlg.messages.length) {
+    const m = dlg.messages[renderedChatMsgCount];
+
+    // If this is a walker message and the streaming element exists,
+    // promote it in-place (just remove the streaming class) — no flicker
+    if (m.role === 'walker' && streamEl) {
+      streamEl.classList.remove('streaming');
+      const textEl = streamEl.querySelector('.chat-text');
+      if (textEl) textEl.textContent = m.text;
+      streamEl = null;
+      llmStreamingShown = false;
+    } else {
+      const div = document.createElement('div');
+      div.className = `chat-message chat-${m.role}`;
+      const sender = document.createElement('span');
+      sender.className = 'chat-sender';
+      sender.textContent = m.role === 'player' ? 'You' : dlg.walkerName;
+      const text = document.createElement('span');
+      text.className = 'chat-text';
+      text.textContent = m.text;
+      div.appendChild(sender);
+      div.appendChild(text);
+      msgsEl.appendChild(div);
+    }
+    renderedChatMsgCount++;
+  }
+
+  // Manage streaming indicator
+  streamEl = msgsEl.querySelector('.streaming') as HTMLElement | null;
+  if (dlg.isStreaming) {
+    if (!streamEl) {
+      // Create streaming element
+      streamEl = document.createElement('div');
+      streamEl.className = 'chat-message chat-walker streaming';
+      const sender = document.createElement('span');
+      sender.className = 'chat-sender';
+      sender.textContent = dlg.walkerName;
+      const text = document.createElement('span');
+      text.className = 'chat-text';
+      text.textContent = dlg.streamBuffer || '...';
+      streamEl.appendChild(sender);
+      streamEl.appendChild(text);
+      msgsEl.appendChild(streamEl);
+      llmStreamingShown = true;
+    } else {
+      // Update streaming text
+      const textEl = streamEl.querySelector('.chat-text');
+      if (textEl) textEl.textContent = dlg.streamBuffer || '...';
+    }
+  } else if (streamEl) {
+    // Streaming done but no message yet — remove stale indicator
+    streamEl.remove();
+    llmStreamingShown = false;
+  }
+
+  // Scroll to bottom
+  msgsEl.scrollTop = msgsEl.scrollHeight;
+
+  // Update input/button disabled state directly (no rebuild)
+  const inp = document.getElementById('llm-chat-input') as HTMLInputElement;
+  const sendBtn = document.getElementById('llm-send-btn') as HTMLButtonElement;
+  if (inp) inp.disabled = dlg.isStreaming;
+  if (sendBtn) sendBtn.disabled = dlg.isStreaming;
+
+  // Update relationship label
+  const w = state.walkers.find(ws => ws.walkerNumber === dlg.walkerId);
+  const relLabel = !w ? '' : w.relationship > 40 ? 'friendly' : w.relationship > 10 ? 'curious' : w.relationship < -10 ? 'hostile' : 'neutral';
+  const relEl = document.getElementById('llm-rel-label');
+  if (relEl && relEl.textContent !== relLabel) {
+    relEl.textContent = relLabel;
+    relEl.className = `walker-disposition ${relLabel}`;
   }
 }
 

@@ -310,7 +310,7 @@ html, body {
 
 /* --- BIRD'S EYE VISUALIZATION --- */
 .viz-panel {
-  width: 200px;
+  width: 350px;
   flex-shrink: 0;
   background: var(--bg-primary);
   border-right: 1px solid var(--border-color);
@@ -515,6 +515,67 @@ html, body {
   50% { opacity: 0.5; }
 }
 
+/* EQ-style speed meter */
+.speed-meter {
+  position: relative;
+  height: 12px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 2px;
+  margin: 0.4rem 0;
+  overflow: visible;
+}
+
+.speed-meter-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  border-radius: 1px;
+  transition: width 0.15s ease-out;
+}
+
+.speed-meter-peak {
+  position: absolute;
+  top: 0;
+  width: 2px;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.6);
+  transition: left 0.05s linear;
+}
+
+.speed-meter-danger {
+  position: absolute;
+  top: -3px;
+  width: 2px;
+  height: calc(100% + 6px);
+  background: var(--accent-red);
+  opacity: 0.8;
+  z-index: 1;
+}
+
+.speed-meter-danger::after {
+  content: '4.0';
+  position: absolute;
+  top: -12px;
+  left: -8px;
+  font-size: 0.5rem;
+  color: var(--accent-red);
+  font-family: var(--font-mono);
+}
+
+.speed-meter-target {
+  position: absolute;
+  top: -2px;
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid var(--accent-blue);
+  transform: translateX(-4px);
+  z-index: 2;
+}
+
 .warning-display {
   display: flex;
   gap: 0.3rem;
@@ -709,6 +770,29 @@ html, body {
   color: var(--accent-amber);
   background: var(--accent-amber-dim);
   animation: pulse 1.5s infinite;
+}
+
+.mute-btn {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  padding: 0.3rem 0.6rem;
+  cursor: pointer;
+  border-radius: 2px;
+  transition: all 0.2s;
+  margin-left: 0.5rem;
+}
+
+.mute-btn:hover {
+  border-color: var(--text-secondary);
+  color: var(--text-secondary);
+}
+
+.mute-btn.muted {
+  border-color: var(--accent-red-dim);
+  color: var(--accent-red);
 }
 
 /* ============================================================
@@ -1101,7 +1185,7 @@ html, body {
 
   .viz-panel {
     width: 100%;
-    height: 120px;
+    height: 160px;
     border-right: none;
     border-bottom: 1px solid var(--border-color);
   }
