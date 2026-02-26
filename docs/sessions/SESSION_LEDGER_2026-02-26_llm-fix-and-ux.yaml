@@ -1,0 +1,59 @@
+session_id: "2026-02-26-llm-fix-and-ux"
+date: "2026-02-26"
+branch: "main"
+version: "0.2.0"
+prior_session: "2026-02-26-initial-llm-viz"
+
+build_verification:
+  client_typescript: "pass"
+  server_typescript: "pass"
+  vite_build: "pass"
+
+commits:
+  - hash: "c5bd38a"
+    message: "fix(agents): Fix LLM streaming — correct event type and input format"
+  - hash: "ec85090"
+    message: "feat(client): Add walker picker and position change feedback"
+  - hash: "b2d7fe4"
+    message: "docs(changelog): Add v0.2.0 — LLM agents, visualization, UX improvements"
+
+artifacts_updated:
+  - path: "server/index.ts"
+    change: "Fixed stream event type filter and replaced developer role with embedded context"
+  - path: "server/agents.ts"
+    change: "Removed temperature param rejected by gpt-5.2-chat-latest"
+  - path: "src/ui.ts"
+    change: "Added walker picker, position change feedback, refactored handleTalk/handleWalkerClick"
+  - path: "src/main.ts"
+    change: "Added closeWalkerPicker import, Escape key closes picker"
+  - path: "src/styles.css"
+    change: "Added walker picker CSS and action-btn active state"
+  - path: "docs/CHANGELOG.md"
+    change: "Added v0.2.0 entry"
+
+decisions_made:
+  - decision: "Talk button opens walker picker instead of random selection"
+    rationale: "User wants to choose who to talk to, not have it chosen randomly"
+  - decision: "Position changes produce narrative feedback"
+    rationale: "User reported position buttons felt broken — no visible feedback"
+  - decision: "Embed game context in user message, not developer role"
+    rationale: "OpenAI Agents SDK input items only support user/assistant roles"
+
+open_questions:
+  - "Position buttons may still feel unresponsive — user reported 'not working' but code logic is correct. May need browser console investigation."
+  - "/end-session and /begin-session skills not discoverable by Claude Code — may need restart or different registration method"
+
+known_risks:
+  - "OPENAI_API_KEY is required for agent server — no graceful degradation (by design)"
+  - "gpt-5.2-chat-latest model availability — if OpenAI removes/renames, server breaks"
+  - "Agent conversation history is in-memory only — lost on server restart"
+
+explicitly_deferred:
+  - "Persistent conversation history (database) — kept in-memory for simplicity"
+  - "Walker position drift over time (walkers moving between front/middle/back) — positions are static"
+
+next_actions:
+  - "Investigate position button responsiveness in browser (check console for click events)"
+  - "Test full conversation flow with multiple walkers"
+  - "Verify skill discovery after Claude Code restart"
+  - "Consider adding walker-initiated conversations (NPCs approach player)"
