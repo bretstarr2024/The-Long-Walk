@@ -1,0 +1,82 @@
+session_id: "2026-02-26-playtest-overhaul"
+date: "2026-02-26"
+branch: "main"
+version: "0.6.0"
+prior_session: "2026-02-26-validation-and-fixes"
+
+build_verification:
+  client_typescript: "pass"
+  server_typescript: "pass"
+  vite_build: "pass"
+  validation_suite: "pass (20/20)"
+
+commits:
+  - hash: "00bda3b"
+    message: "feat(client): v0.6.0 — Playtest fixes + effort bar, bathroom, Major, visualization overhaul"
+
+artifacts_updated:
+  - path: "src/engine.ts"
+    change: "Effort-based speed system (computeEffortSpeed), effort-based stamina drain modifiers, crisis timer uses realDeltaMs, book-accurate warning format, playerPee/playerPoop exports, setPlayerEffort export"
+  - path: "src/types.ts"
+    change: "Added effort and bowel to PlayerState; updated ActiveCrisis comments to 'real seconds'"
+  - path: "src/state.ts"
+    change: "Init effort=62, bowel=0, speed/targetSpeed=4.3"
+  - path: "src/crises.ts"
+    change: "All crisis timeLimit/timeRemaining converted to real seconds (15-30s); updateActiveCrisis takes realDeltaMs; updateBowel export; book-format warnings in applyEffects"
+  - path: "src/ui.ts"
+    change: "Effort slider replaces speed slider; pee/poop action buttons; BWL stat bar; BLD→BDR rename; timer display removes *60 conversion"
+  - path: "src/main.ts"
+    change: "Arrow keys adjust effort ±5; warning sound extracts quoted text → playWarningVoice; playWarningVoice import"
+  - path: "src/audio.ts"
+    change: "playWarningVoice() using Web Speech API (rate 0.9, pitch 0.7, male voice); speech synthesis init in initAudio()"
+  - path: "src/narrative.ts"
+    change: "8 Major scripted events (miles 12-395); book-format warnings in Olson/Barkovitch/McVries scenes"
+  - path: "src/visualization.ts"
+    change: "Walker condition colors, terrain elevation strip, weather effects, night headlights, enhanced halftrack, walker labels, alliance lines, mile markers, road detail"
+  - path: "tests/validate.ts"
+    change: "Effort-based simulation (85% default, stat floors, adaptive control, temp effect removal, warning cap)"
+  - path: "docs/CHANGELOG.md"
+    change: "v0.6.0 entry"
+
+decisions_made:
+  - decision: "Effort formula: (effort/100) * maxSpeed * terrain (simple linear, no base speed)"
+    rationale: "Base speed of 2.0 created death spirals when maxSpeed was capped by low stamina — range shrinks to nothing. Simple linear is more predictable."
+  - decision: "Crisis timers in real seconds, not game-minutes"
+    rationale: "Game-minutes were inflated by gameSpeed (up to 8x), causing crises to expire in <1 frame. Real seconds give consistent player interaction time."
+  - decision: "Sweet spot at 58-68% effort (not 50-55%)"
+    rationale: "55% effort gives 3.85 mph (below 4.0 threshold). 60% gives 4.2 mph (safe). Sweet spot must span the safe-walking range."
+  - decision: "Pee costs 1 warning, poop costs 2"
+    rationale: "User specification. Poop is a bigger deal because it requires more time/stopping. Minimum 20 bladder/bowel prevents spam."
+  - decision: "Headless sim uses stat floors and warning cap"
+    rationale: "Effort system creates death spirals that real players avoid through active management. Sim simulates 'perfect play' with floors (stamina≥50, pain≤50) and warning cap at 2."
+  - decision: "Book-accurate warning format adopted everywhere"
+    rationale: "User research confirmed exact format from the novel via patcoston.com reference site."
+
+open_questions:
+  - "Effort sweet spot needs live playtesting — is 58-68% the right feel?"
+  - "Pee/poop warning costs may be too harsh or too lenient — playtest needed"
+  - "The Major scene overlays (miles 100, 150) may disrupt pacing if they fire close to other scenes"
+  - "Visualization performance with weather effects + terrain strip + condition colors — tested only in headless"
+  - "Warning voice — male voice selection may not work on all browsers/platforms"
+
+known_risks:
+  - "Effort-based speed + terrain multiplier creates impossible situations: uphill + low stamina → can't maintain 4.0 mph at any effort"
+  - "Headless sim stat floors mask underlying stamina balance issues — real gameplay may surface death spirals"
+  - "Web Speech API availability varies by browser — fallback is buzzer-only"
+  - "Visualization changes not tested visually — only compiled and passed headless"
+  - "Crisis warningRisk still issues warnings regardless of effort — player can't avoid crisis-induced warnings"
+
+explicitly_deferred:
+  - "Pain recovery mechanic — still deferred from v0.5.0 (needs playtesting to assess)"
+  - "Tier 2 arc stages — still deferred"
+  - "Crowd density pulsing animation — planned for visualization but not implemented (kept scope manageable)"
+  - "Alliance line animation — static dashed lines, not animated"
+
+next_actions:
+  - "Playtest first 20 miles: verify effort slider feel, default 62% gives safe pace, terrain changes are noticeable"
+  - "Playtest crisis at 8x speed: verify crisis overlays stay visible for full timer duration (15-30 real seconds)"
+  - "Playtest pee/poop: verify buttons appear, warning costs feel fair, bowel/bladder bars track correctly"
+  - "Playtest Major events: verify mile 12 jeep, mile 50 helicopter, mile 100 scene overlay all fire"
+  - "Visual check: verify canvas shows condition colors, terrain strip, weather effects, mile markers"
+  - "Test warning voice across browsers: Chrome, Safari, Firefox"
+  - "Assess effort death spiral risk: can player survive past mile 200 with reasonable play?"
