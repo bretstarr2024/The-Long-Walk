@@ -3,6 +3,7 @@
 // SSE streaming endpoint for walker conversations
 // ============================================================
 
+import 'dotenv/config';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { serve } from '@hono/node-server';
@@ -59,14 +60,18 @@ app.post('/api/chat/:walkerId', async (c) => {
   const contextBlock = buildGameContextBlock(gameContext);
   const history = getHistory(walkerId);
 
-  // Build input items for the agent
+  // Build input items for the agent (Responses API format)
   // Only user/assistant roles are supported in Agents SDK input items,
   // so we embed the game context as a prefix on the player's message.
-  const inputItems: Array<{ role: string; content: string }> = [
+  const inputItems = [
     // Previous conversation history
     ...history,
     // Player's message with game context embedded
-    { role: 'user', content: `[GAME STATE]\n${contextBlock}\n\n[PLAYER SAYS]\n${message}` },
+    {
+      type: 'message' as const,
+      role: 'user' as const,
+      content: [{ type: 'input_text' as const, text: `[GAME STATE]\n${contextBlock}\n\n[PLAYER SAYS]\n${message}` }],
+    },
   ];
 
   // Record player message in history

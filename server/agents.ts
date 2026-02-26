@@ -12,8 +12,13 @@ const MODEL = 'gpt-5.2-chat-latest';
 // Cache: one agent per walker number
 const agentCache = new Map<number, Agent>();
 
-// Conversation history per walker: array of input items
-const historyCache = new Map<number, Array<{ role: string; content: string }>>();
+// Conversation history per walker: Responses API input items
+type InputItem = {
+  type: 'message';
+  role: string;
+  content: Array<{ type: string; text: string }>;
+};
+const historyCache = new Map<number, InputItem[]>();
 
 export function getOrCreateAgent(walker: WalkerProfile): Agent {
   const existing = agentCache.get(walker.walkerNumber);
@@ -34,7 +39,7 @@ export function getOrCreateAgent(walker: WalkerProfile): Agent {
   return agent;
 }
 
-export function getHistory(walkerNumber: number): Array<{ role: string; content: string }> {
+export function getHistory(walkerNumber: number): InputItem[] {
   if (!historyCache.has(walkerNumber)) {
     historyCache.set(walkerNumber, []);
   }
@@ -43,7 +48,12 @@ export function getHistory(walkerNumber: number): Array<{ role: string; content:
 
 export function addToHistory(walkerNumber: number, role: string, content: string) {
   const history = getHistory(walkerNumber);
-  history.push({ role, content });
+  const contentType = role === 'assistant' ? 'output_text' : 'input_text';
+  history.push({
+    type: 'message',
+    role,
+    content: [{ type: contentType, text: content }],
+  });
   // Keep history bounded (last 20 messages)
   if (history.length > 20) {
     historyCache.set(walkerNumber, history.slice(-20));
