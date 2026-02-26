@@ -113,21 +113,13 @@ function setupEventDelegation() {
     }
   });
 
-  // Keyboard shortcuts within game UI
+  // Keyboard shortcuts within game UI (Escape handled in main.ts to avoid duplicate cascade)
   app.addEventListener('keydown', (e: KeyboardEvent) => {
     if (!gameState) return;
     const target = e.target as HTMLElement;
     if (target.id === 'llm-chat-input' && e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSendChat(gameState);
-    }
-    if (e.key === 'Escape') {
-      if (gameState?.llmDialogue) {
-        closeLLMDialogue(gameState);
-      } else if (walkerPickerOpen) {
-        walkerPickerOpen = false;
-        cachedActionsHtml = '';
-      }
     }
   });
 }
@@ -254,7 +246,7 @@ export function closeWalkerPicker() {
   }
 }
 
-function closeLLMDialogue(state: GameState) {
+export function closeLLMDialogue(state: GameState) {
   if (!state.llmDialogue) return;
   const dlg = state.llmDialogue;
   // Increment conversation count if at least one exchange happened
@@ -282,13 +274,25 @@ function buildGameContext(state: GameState, walkerNum: number): GameContextForAg
   if (walkerData?.arcStages) {
     const mile = state.world.milesWalked;
     const convos = w.conversationCount;
-    // Find the latest arc stage the walker qualifies for
+    // Find the latest arc stage the walker qualifies for (mile + conversations)
     for (let i = walkerData.arcStages.length - 1; i >= 0; i--) {
       const stage = walkerData.arcStages[i];
       if (mile >= stage.mileRange[0] && convos >= stage.minConversations) {
         arcPhase = stage.arcPhase;
         arcPromptHint = stage.promptHint;
         break;
+      }
+    }
+    // Fallback: if no stage matched (mile advanced past range but convos insufficient),
+    // use the latest stage whose mile range the walker has entered
+    if (!arcPhase) {
+      for (let i = walkerData.arcStages.length - 1; i >= 0; i--) {
+        const stage = walkerData.arcStages[i];
+        if (mile >= stage.mileRange[0]) {
+          arcPhase = stage.arcPhase;
+          arcPromptHint = stage.promptHint;
+          break;
+        }
       }
     }
   }
@@ -429,9 +433,9 @@ function applyGameEffect(state: GameState, effect: { effectType: string; walkerI
       }
       break;
     case 'flag':
-      if (effect.key) {
-        state.player.flags[effect.key] = effect.value ?? true;
-        console.log(`[Effect] Flag "${effect.key}" = ${effect.value}`);
+      if (effect.key && w) {
+        w.conversationFlags[effect.key] = effect.value ?? true;
+        console.log(`[Effect] Flag "${effect.key}" = ${effect.value} on walker #${w.walkerNumber}`);
       }
       break;
     case 'info':
@@ -646,7 +650,7 @@ function renderCreation(state: GameState) {
 const INTRO_STEPS = [
   (s: GameState) => `<p>The morning is cold. October in Maine, at the Canadian border. The sky is the color of old steel.</p>
 <p>One hundred boys stand in a loose column on Route 1. They are between sixteen and eighteen years old. They have volunteered for this.</p>
-<p>You are Walker #100. ${s.player.name}, from New Columbia. The 51st state. Nobody here knows where that is. Nobody here knows you.</p>`,
+<p>You are Walker #100. ${escapeHtml(s.player.name)}, from New Columbia. The 51st state. Nobody here knows where that is. Nobody here knows you.</p>`,
 
   (s: GameState) => `<div class="major-speech">"Gentlemen. You have volunteered. You have been selected. You are the Long Walkers."</div>
 <p>The Major's voice comes through the halftrack's speakers. Calm. Paternal. Terrifying.</p>
@@ -659,7 +663,7 @@ const INTRO_STEPS = [
 <p>You take your first step. Then another. The road stretches ahead, vanishing into the Maine woods.</p>
 <p>The halftrack rumbles to life behind you. The crowd at the starting line cheers.</p>
 <p>The Long Walk has begun.</p>
-<p style="margin-top: 2rem; color: var(--text-dim);">Your Prize: <em>${s.player.prize}</em>. Remember why you're here.</p>`,
+<p style="margin-top: 2rem; color: var(--text-dim);">Your Prize: <em>${escapeHtml(s.player.prize)}</em>. Remember why you're here.</p>`,
 ];
 
 function renderIntro(state: GameState) {
@@ -1183,16 +1187,33 @@ function updateGameControls(state: GameState) {
   }
 }
 
-// --- Scene handlers ---
-function handleSceneNext(state: GameState) {
+// --- Scene handlers (exported for keyboard shortcuts in main.ts) ---
+export function handleSceneNext(state: GameState) {
   if (!state.activeScene) return;
   if (state.activeScene.currentPanel < state.activeScene.panels.length - 1) {
     state.activeScene.currentPanel++;
-    cachedSceneHtml = '';
+    // Direct DOM update to avoid full innerHTML rebuild (which re-triggers fadeIn animation)
+    const scene = state.activeScene;
+    const panel = scene.panels[scene.currentPanel];
+    const isLast = scene.currentPanel >= scene.panels.length - 1;
+    const textEl = document.querySelector('.scene-text');
+    if (textEl) textEl.innerHTML = panel.text;
+    const counterEl = document.querySelector('.scene-counter');
+    if (counterEl) counterEl.textContent = `${scene.currentPanel + 1}/${scene.panels.length}`;
+    if (isLast) {
+      const btn = document.querySelector('.scene-btn') as HTMLElement;
+      if (btn) {
+        btn.setAttribute('data-action', 'scene-close');
+        btn.textContent = 'Continue Walking';
+      }
+    }
+    // Sync cache so updateSceneOverlay won't rebuild
+    const container = document.getElementById('scene-container');
+    if (container) cachedSceneHtml = container.innerHTML;
   }
 }
 
-function handleSceneClose(state: GameState) {
+export function handleSceneClose(state: GameState) {
   if (!state.activeScene) return;
   // Add scene text to narrative log for posterity
   for (const panel of state.activeScene.panels) {
@@ -1200,6 +1221,9 @@ function handleSceneClose(state: GameState) {
   }
   state.activeScene = null;
   state.isPaused = false;
+  // Clear DOM immediately — don't just clear cache, or updateSceneOverlay won't know to clear
+  const container = document.getElementById('scene-container');
+  if (container) container.innerHTML = '';
   cachedSceneHtml = '';
 }
 
@@ -1352,6 +1376,18 @@ function updateCrisisOverlay(state: GameState) {
   const timerColor = timerPct > 50 ? 'var(--accent-blue)' : timerPct > 20 ? 'var(--accent-amber)' : 'var(--accent-red)';
   const timerSecs = Math.ceil(crisis.timeRemaining * 60); // game-minutes to seconds display
 
+  // If crisis structure already exists, just update the timer (avoids full DOM rebuild every 200ms)
+  if (cachedCrisisHtml !== '' && cachedCrisisHtml === crisis.title) {
+    const timerText = container.querySelector('.crisis-timer-text');
+    if (timerText) timerText.textContent = `${timerSecs}s`;
+    const timerFill = container.querySelector('.crisis-timer-fill') as HTMLElement;
+    if (timerFill) {
+      timerFill.style.width = `${timerPct}%`;
+      timerFill.style.background = timerColor;
+    }
+    return;
+  }
+
   // Check if ally is nearby for ally-required options
   const hasAllyNearby = state.player.alliances.some(num => {
     const w = state.walkers.find(ws => ws.walkerNumber === num);
@@ -1372,7 +1408,7 @@ function updateCrisisOverlay(state: GameState) {
       </button>`;
   }).join('');
 
-  const html = `
+  container.innerHTML = `
     <div class="crisis-overlay">
       <div class="crisis-box">
         <div class="crisis-header">
@@ -1391,11 +1427,8 @@ function updateCrisisOverlay(state: GameState) {
       </div>
     </div>
   `;
-
-  if (html !== cachedCrisisHtml) {
-    container.innerHTML = html;
-    cachedCrisisHtml = html;
-  }
+  // Store crisis title as sentinel — rebuilt only when a new crisis appears
+  cachedCrisisHtml = crisis.title;
 }
 
 // --- Dialogue overlay: cached ---
@@ -1624,13 +1657,13 @@ function renderGameOver(state: GameState) {
   const stats = getGameStats(state);
 
   const statsHtml = Object.entries(stats).map(([k, v]) =>
-    `<div>${k}: <strong>${v}</strong></div>`
+    `<div>${escapeHtml(k)}: <strong>${escapeHtml(v)}</strong></div>`
   ).join('');
 
   app.innerHTML = `
     <div class="screen-gameover">
-      <div class="gameover-title ${isVictory ? 'victory' : 'defeat'}">${title}</div>
-      <div class="gameover-text">${text.split('\n').map(l => `<p>${l}</p>`).join('')}</div>
+      <div class="gameover-title ${isVictory ? 'victory' : 'defeat'}">${escapeHtml(title)}</div>
+      <div class="gameover-text">${text.split('\n').map(l => `<p>${escapeHtml(l)}</p>`).join('')}</div>
       <div class="gameover-stats">${statsHtml}</div>
       <button class="btn-restart" data-action="restart">WALK AGAIN</button>
     </div>

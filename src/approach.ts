@@ -91,7 +91,7 @@ export function checkApproach(state: GameState): void {
           walkerNum: w.walkerNumber,
           type: 'elimination_reaction',
           priority: 9,
-          context: `${deadData.name} was just eliminated. React to their death. You ${dead.relationship > 30 ? 'knew them well' : 'walked near them'}.`,
+          context: `${deadData.name} was just eliminated. React to their death. You ${w.relationship > 30 ? 'were close to ' + state.player.name : 'walked near them'}.`,
         });
       }
     }
@@ -159,6 +159,19 @@ export function checkApproach(state: GameState): void {
         });
       }
     }
+
+    // Proximity: low-priority fallback — Tier 1/2 walker at your position, hasn't spoken recently
+    if (data.tier <= 2 && w.conversationCount > 0) {
+      const proxKey = `prox_${w.walkerNumber}_${Math.floor(state.world.milesWalked / 30)}`;
+      if (!state.triggeredEvents.has(proxKey)) {
+        candidates.push({
+          walkerNum: w.walkerNumber,
+          type: 'proximity',
+          priority: 1,
+          context: `You're walking near ${state.player.name}. Make a brief, casual remark about the walk, the weather, or something you notice.`,
+        });
+      }
+    }
   }
 
   if (candidates.length === 0) return;
@@ -185,6 +198,8 @@ export function checkApproach(state: GameState): void {
     ? `offer_ally_${chosen.walkerNum}`
     : chosen.type === 'crisis_aftermath'
     ? `crisis_after_${chosen.walkerNum}_${Math.floor(state.lastCrisisResolveMile)}`
+    : chosen.type === 'proximity'
+    ? `prox_${chosen.walkerNum}_${Math.floor(state.world.milesWalked / 30)}`
     : `intro_${chosen.walkerNum}`;
 
   state.triggeredEvents.add(triggerKey);

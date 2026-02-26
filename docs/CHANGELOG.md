@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.5.0 — 2026-02-26
+
+Validation suite, second-pass review sweep (15 fixes), scene overlay bugfix, and terrain variety.
+
+### Validation Suite
+- **Automated test harness**: `npm run validate` runs 20 checks (10 data integrity + 10 headless simulation) in ~0.2s
+- **Headless simulation**: Runs `gameTick()` for 400 miles without DOM/LLM — verifies elimination order, warning system, act progression, scene triggers, ending reachability
+- **Data integrity checks**: Walker roster, arc completeness, route/crowd coverage, NPC relationships, required fields
+
+### Bug Fixes
+- **Scene overlay "Continue Walking" broken**: `handleSceneClose` prematurely cleared `cachedSceneHtml` so render never cleared the DOM — now clears container immediately
+- **Scene slide transition flickering**: Panel changes rebuilt entire overlay via innerHTML, re-triggering fadeIn animation — now uses direct DOM updates
+- **Crisis warnings bypass pipeline**: `warningRisk` from crises didn't update `lastWarningTime`/`slowAccum`/`lastWarningMile` — could cause rapid double-warnings
+- **`set_flag` stored on wrong object**: Agent flag effects stored on `player.flags` instead of walker's `conversationFlags`
+- **Arc stage overheard lost on LLM failure**: `triggeredEvents.add()` fired before LLM call — network failure permanently lost story beat. Now deferred to success handler
+- **Arc phase gap**: Walker lost all arc context when mile range advanced past conversation threshold — now falls back to latest entered stage
+- **Duplicate Escape handler cascade**: Both `ui.ts` and `main.ts` handled Escape — consolidated to `main.ts` only, using exported `closeLLMDialogue`/`handleSceneClose`
+- **`elimination_reaction` wrong relationship**: Used dead walker's relationship with player instead of approaching walker's
+- **Missing walker #99**: `FIRST_NAMES` array had 74 entries instead of 75 (added 'Connors')
+
+### Performance
+- **`getWalkerData()` O(1)**: Converted from `.find()` (O(n), 300+ calls/tick) to lazy-built `Map<number, WalkerData>`
+- **Crisis overlay targeted updates**: Timer text/bar updated via DOM ops instead of full innerHTML rebuild every 200ms
+
+### Security
+- **Self-XSS via player name/prize**: Applied `escapeHtml()` to intro text and gameover screen innerHTML sites
+
+### New Features
+- **Proximity approach type**: 8th approach type implemented (priority 1, casual remarks from nearby walkers, 30-mile cooldown)
+- **Downhill terrain**: Miles 80-90 (descent into town) — reduced stamina drain, knee pain
+- **Rough terrain**: Miles 250-270 (deteriorating road) — 1.2x stamina drain modifier
+- **Absence effects repeatable**: Changed from 1 per walker total to 1 per 5-mile bucket (multiple ghost references possible in 2-30 mile window)
+
+### Infrastructure
+- **Scene/LLM-chat guard**: Scenes won't activate during open LLM dialogue (prevents overlay overlap)
+- **Module reset exports**: `resetEngineGlobals()`, `resetCrisisGlobals()`, `resetWalkerDataMap()` for headless testing
+
 ## 0.4.1 — 2026-02-26
 
 Comprehensive code review sweep — security hardening, server reliability, performance optimization, and arc completeness.

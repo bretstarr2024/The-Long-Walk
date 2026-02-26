@@ -116,12 +116,18 @@ export function createInitialGameState(): GameState {
 
 // --- State Accessors ---
 
+// O(1) walker data lookup map — built once per game, avoids 300+ .find() calls per tick
+let walkerDataMap: Map<number, WalkerData> | null = null;
+
 export function getAliveWalkers(state: GameState): WalkerState[] {
   return state.walkers.filter(w => w.alive);
 }
 
 export function getWalkerData(state: GameState, num: number): WalkerData | undefined {
-  return state.walkerData.find(w => w.walkerNumber === num);
+  if (!walkerDataMap) {
+    walkerDataMap = new Map(state.walkerData.map(d => [d.walkerNumber, d]));
+  }
+  return walkerDataMap.get(num);
 }
 
 export function getWalkerState(state: GameState, num: number): WalkerState | undefined {
@@ -133,8 +139,13 @@ export function getNearbyWalkers(state: GameState): WalkerState[] {
     w.alive && w.position === state.player.position
   );
   // Sort by tier so Tier 1 characters appear first
-  const tierOf = (w: WalkerState) => state.walkerData.find(d => d.walkerNumber === w.walkerNumber)?.tier ?? 3;
+  const tierOf = (w: WalkerState) => getWalkerData(state, w.walkerNumber)?.tier ?? 3;
   return atPosition.sort((a, b) => tierOf(a) - tierOf(b));
+}
+
+/** Reset walker data map (for headless testing) */
+export function resetWalkerDataMap() {
+  walkerDataMap = null;
 }
 
 export function getWalkersRemaining(state: GameState): number {

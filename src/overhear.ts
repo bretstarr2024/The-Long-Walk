@@ -130,6 +130,7 @@ export function checkAmbientOverhear(state: GameState): void {
   let arcWalkerB: number | null = null;
   let arcScenePrompt: string | null = null;
   let arcPreviousContext: string | null = null;
+  let arcStageKey: string | null = null;
 
   for (const rel of NPC_RELATIONSHIPS) {
     const wA = getWalkerState(state, rel.walkerA);
@@ -144,12 +145,12 @@ export function checkAmbientOverhear(state: GameState): void {
       // Both walkers need to be at player's position (or nearby)
       if (wA.position !== state.player.position && wB.position !== state.player.position) continue;
 
-      // Found a ready arc stage
+      // Found a ready arc stage — defer triggeredEvents.add to success handler
       arcWalkerA = rel.walkerA;
       arcWalkerB = rel.walkerB;
       arcScenePrompt = stage.scenePrompt;
       arcPreviousContext = stage.previousContext || null;
-      state.triggeredEvents.add(`npc_rel_${stage.id}`);
+      arcStageKey = `npc_rel_${stage.id}`;
       break;
     }
     if (arcWalkerA !== null) break;
@@ -209,11 +210,12 @@ export function checkAmbientOverhear(state: GameState): void {
       state.overhearInProgress = false;
       if (result.error || !result.text) {
         console.log('[Overhear] LLM overhear failed:', result.error);
-        return;
+        return; // Don't consume arc stage — it can retry next mile
       }
 
-      // Only consume the mile gap on success
+      // Only consume the mile gap and arc stage on success
       state.lastOverheardMile = state.world.milesWalked;
+      if (arcStageKey) state.triggeredEvents.add(arcStageKey);
 
       // Parse the response into narrative entries
       addNarrative(state, 'You overhear a conversation nearby...', 'overheard');

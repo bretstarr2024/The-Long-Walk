@@ -8,7 +8,7 @@ import { gameTick } from './engine';
 import { checkScriptedEvents, checkHallucinations, checkOverheards, checkEnding, checkAbsenceEffects } from './narrative';
 import { checkAmbientOverhear } from './overhear';
 import { checkApproach } from './approach';
-import { initUI, render, setEnding, closeWalkerPicker } from './ui';
+import { initUI, render, setEnding, closeWalkerPicker, handleSceneNext, handleSceneClose, closeLLMDialogue } from './ui';
 import { closeDialogue } from './dialogue';
 import { isServerAvailable } from './agentClient';
 import { resolveCrisis } from './crises';
@@ -169,24 +169,15 @@ document.addEventListener('keydown', (e) => {
     if (e.key === ' ' || e.key === 'Enter') {
       e.preventDefault();
       if (state.activeScene.currentPanel < state.activeScene.panels.length - 1) {
-        state.activeScene.currentPanel++;
+        handleSceneNext(state);
       } else {
-        // Last panel — close scene
-        for (const panel of state.activeScene.panels) {
-          addNarrative(state, panel.text, panel.type);
-        }
-        state.activeScene = null;
-        state.isPaused = false;
+        handleSceneClose(state);
       }
       return;
     }
     if (e.key === 'Escape') {
       e.preventDefault();
-      for (const panel of state.activeScene.panels) {
-        addNarrative(state, panel.text, panel.type);
-      }
-      state.activeScene = null;
-      state.isPaused = false;
+      handleSceneClose(state);
       return;
     }
     return; // Swallow all other keys during scene
@@ -224,7 +215,7 @@ document.addEventListener('keydown', (e) => {
       e.preventDefault();
       // Dismiss overlays in priority order (topmost first)
       if (state.llmDialogue) {
-        state.llmDialogue = null;
+        closeLLMDialogue(state);
       } else if (state.activeApproach) {
         state.activeApproach = null;
       } else if (state.activeDialogue) {

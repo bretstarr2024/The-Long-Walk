@@ -17,8 +17,8 @@ export function checkScriptedEvents(state: GameState) {
 
     state.triggeredEvents.add(event.id);
 
-    // Scene presentation: pause game and show cinematic overlay
-    if (event.presentation === 'scene' && event.scenePanels && !state.activeScene) {
+    // Scene presentation: pause game and show cinematic overlay (not during LLM chat)
+    if (event.presentation === 'scene' && event.scenePanels && !state.activeScene && !state.llmDialogue) {
       state.activeScene = {
         id: event.id,
         panels: event.scenePanels,
@@ -588,8 +588,8 @@ export function checkAbsenceEffects(state: GameState) {
     const milesSinceDeath = mile - w.eliminatedAtMile;
     if (milesSinceDeath < 2 || milesSinceDeath > 30) continue;
 
-    // 3% chance per mile check — use unique event key to avoid spamming
-    const absenceKey = `absence_${w.walkerNumber}`;
+    // 3% chance per mile check — keyed by 5-mile bucket so multiple triggers are possible
+    const absenceKey = `absence_${w.walkerNumber}_${Math.floor(mile / 5)}`;
     if (state.triggeredEvents.has(absenceKey)) continue;
     if (Math.random() > 0.03) continue;
 
