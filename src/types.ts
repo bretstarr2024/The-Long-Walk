@@ -14,9 +14,77 @@ export type CrowdMood = 'excited' | 'cheering' | 'subdued' | 'uneasy' | 'hostile
 export type BehavioralState = 'steady' | 'struggling' | 'talking' | 'breaking_down' | 'eliminated';
 export type AlliancePotential = 'none' | 'low' | 'medium' | 'high';
 export type Screen = 'title' | 'creation' | 'intro' | 'game' | 'dialogue' | 'gameover';
-export type NarrativeType = 'narration' | 'dialogue' | 'warning' | 'elimination' | 'system' | 'thought' | 'crowd' | 'hallucination' | 'event';
+export type NarrativeType = 'narration' | 'dialogue' | 'warning' | 'elimination' | 'system' | 'thought' | 'crowd' | 'hallucination' | 'event' | 'overheard';
 export type Act = 1 | 2 | 3 | 4;
 export type HorrorTier = 1 | 2 | 3 | 4;
+
+export type CrisisType =
+  | 'stumble'
+  | 'falling_asleep'
+  | 'blister_burst'
+  | 'cramp_lockup'
+  | 'vomiting'
+  | 'panic_attack'
+  | 'bathroom_emergency'
+  | 'hypothermia'
+  | 'ally_stumble'
+  | 'stranger_plea';
+
+// --- Crisis System ---
+
+export interface CrisisEffects {
+  stamina?: number;
+  pain?: number;
+  morale?: number;
+  hydration?: number;
+  hunger?: number;
+  clarity?: number;
+  speedOverride?: number;      // force speed to this value
+  speedDuration?: number;      // game-minutes the override lasts
+  staminaDrainMult?: number;   // temporary stamina drain multiplier
+  staminaDrainDuration?: number;
+  warningRisk?: number;        // 0-1 chance of warning
+  bladderReset?: boolean;
+  // Ally effects
+  allyStamina?: number;
+  allyMorale?: number;
+  allyHunger?: number;
+  allyHydration?: number;
+  allyRelationship?: number;
+  allySpeedBoost?: boolean;
+  // Special
+  breakAlliance?: boolean;     // alliance breaks
+  allyStrain?: number;         // strain added to ally
+}
+
+export interface CrisisOption {
+  id: string;
+  label: string;
+  description: string;
+  effects: CrisisEffects;
+  requiresAlly: boolean;
+  narrative: string;
+}
+
+export interface ActiveCrisis {
+  type: CrisisType;
+  title: string;
+  description: string;
+  options: CrisisOption[];
+  timeLimit: number;           // game-minutes total
+  timeRemaining: number;       // game-minutes left
+  speedOverride?: number;      // forced speed during crisis
+  defaultEffects: CrisisEffects;
+  defaultNarrative: string;
+  targetWalker?: number;       // walker number for ally_stumble / stranger_plea
+}
+
+// Temporary effects applied after crisis resolution
+export interface TempEffect {
+  type: 'speed_override' | 'stamina_drain_mult' | 'morale_delayed';
+  value: number;
+  remaining: number;           // game-minutes remaining
+}
 
 // --- Player ---
 
@@ -42,6 +110,72 @@ export interface PlayerState {
   waterCooldown: number; // game-minutes until water can be requested
   alliances: number[];   // walker_numbers of allied NPCs
   flags: Record<string, boolean>;
+  bladder: number;       // 0-100
+  activeCrisis: ActiveCrisis | null;
+  lastCrisisMile: number;
+  tempEffects: TempEffect[];
+}
+
+// --- Walker Arc System ---
+
+export type ArcPhase = 'introduction' | 'opening_up' | 'vulnerability' | 'crisis' | 'farewell';
+
+export interface WalkerArcStage {
+  arcPhase: ArcPhase;
+  mileRange: [number, number];
+  minConversations: number;
+  promptHint: string;
+}
+
+// --- NPC Relationship Arcs (overheard conversations between walkers) ---
+
+export interface NPCRelationshipStage {
+  id: string;
+  mileRange: [number, number];
+  scenePrompt: string;
+  previousContext?: string;  // "previously..." text for LLM
+}
+
+export interface NPCRelationship {
+  walkerA: number;
+  walkerB: number;
+  type: 'friendship' | 'rivalry' | 'mentorship' | 'shared_suffering' | 'conflict';
+  stages: NPCRelationshipStage[];
+}
+
+// --- Scene System (cinematic overlays) ---
+
+export interface ScenePanel {
+  text: string;
+  type: NarrativeType;
+}
+
+export interface ActiveScene {
+  id: string;
+  panels: ScenePanel[];
+  currentPanel: number;
+}
+
+// --- Approach System (NPC-initiated conversations) ---
+
+export type ApproachType =
+  | 'arc_milestone'
+  | 'elimination_reaction'
+  | 'warning_check'
+  | 'vulnerability'
+  | 'offer_alliance'
+  | 'crisis_aftermath'
+  | 'introduction'
+  | 'proximity';
+
+export interface ApproachState {
+  walkerId: number;
+  walkerName: string;
+  type: ApproachType;
+  text: string;        // the NPC's opening line (from LLM)
+  isStreaming: boolean; // still waiting for LLM response
+  streamBuffer: string;
+  startTime: number;   // real timestamp for auto-dismiss
 }
 
 // --- NPC Walker ---
@@ -63,6 +197,10 @@ export interface WalkerData {
   physicalState: 'strong' | 'average' | 'weak';
   psychologicalArchetype: string;
   walkingPosition: PackPosition;
+  // Character development (optional, Tier 1/2 only)
+  arcStages?: WalkerArcStage[];
+  declineNarratives?: string[];
+  eliminationScene?: ScenePanel[];
 }
 
 export interface WalkerState {
@@ -79,8 +217,13 @@ export interface WalkerState {
   relationship: number;  // -100 to 100 toward player
   behavioralState: BehavioralState;
   isAlliedWithPlayer: boolean;
+  allyStrain: number;    // 0-100, strain from player leaning on this ally
   conversationFlags: Record<string, boolean>;
   eliminatedAtMile: number | null;
+  conversationCount: number;    // completed conversations with player
+  revealedFacts: string[];      // facts shared via LLM share_info tool
+  playerActions: string[];      // what player has done for this walker
+  lastDeclineNarrativeMile: number;  // mile of last decline narrative shown
 }
 
 // --- World ---
@@ -109,6 +252,8 @@ export interface GameEvent {
   priority: number;
   fired: boolean;
   execute: (state: GameState) => NarrativeEntry[];
+  presentation?: 'ambient' | 'scene';
+  scenePanels?: ScenePanel[];
 }
 
 // --- Dialogue ---
@@ -215,6 +360,14 @@ export interface GameState {
   playtimeMs: number;
   lastTickTime: number;
   introStep: number;    // for multi-step intro sequence
+  lastOverheardMile: number;    // mile of last overheard conversation
+  overhearInProgress: boolean;  // prevents overlapping LLM overheards
+  activeScene: ActiveScene | null;
+  activeApproach: ApproachState | null;
+  lastApproachMile: number;
+  approachInProgress: boolean;  // prevents overlapping approach LLM calls
+  lastWarningMile: number;      // mile of player's most recent warning (for approach triggers)
+  lastCrisisResolveMile: number; // mile of last resolved crisis (for approach triggers)
 }
 
 // --- Route Data ---

@@ -7,13 +7,14 @@ import 'dotenv/config';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { serve } from '@hono/node-server';
-import { run } from '@openai/agents';
+import { Agent, run } from '@openai/agents';
 import { setDefaultOpenAIKey } from '@openai/agents';
 import { getOrCreateAgent, getHistory, addToHistory } from './agents';
 import { buildGameContextBlock, type WalkerProfile, type GameContext } from './prompts';
 import { pendingEffects, type GameEffect } from './tools';
 
 // --- Config ---
+const MODEL = 'gpt-5.2-chat-latest';
 const PORT = 3001;
 const apiKey = process.env.OPENAI_API_KEY;
 if (!apiKey) {
@@ -125,6 +126,214 @@ app.post('/api/chat/:walkerId', async (c) => {
         } catch (err: any) {
           console.error(`[Server] Agent error for walker ${walkerId}:`, err.message || err);
           send('error', JSON.stringify({ error: err.message || 'Agent failed' }));
+          controller.close();
+        }
+      },
+    }),
+    {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      },
+    }
+  );
+});
+
+// --- Overhear endpoint (two walkers talking to each other) ---
+interface OverhearRequest {
+  walkerA: WalkerProfile;
+  walkerB: WalkerProfile;
+  gameContext: GameContext;
+  scenePrompt: string;
+}
+
+app.post('/api/overhear', async (c) => {
+  const body = await c.req.json<OverhearRequest>();
+  const { walkerA, walkerB, gameContext, scenePrompt } = body;
+
+  if (!walkerA || !walkerB || !gameContext || !scenePrompt) {
+    return c.json({ error: 'Missing walkerA, walkerB, gameContext, or scenePrompt' }, 400);
+  }
+
+  const contextBlock = buildGameContextBlock(gameContext);
+
+  const overhearAgent = new Agent({
+    name: 'Overhear_Narrator',
+    instructions: `You are a narrator for The Long Walk, a dystopian survival story. Two walkers are having a brief conversation that a nearby walker overhears.
+
+## The Long Walk
+100 teenage boys walk south from the Maine/Canada border. Maintain 4 mph or get a warning. Three warnings = shot dead. Last one alive wins The Prize.
+
+## Walker A: ${walkerA.name} (#${walkerA.walkerNumber})
+- Age: ${walkerA.age}, from ${walkerA.homeState}
+- Personality: ${walkerA.personalityTraits.join(', ')}
+- Speaking style: ${walkerA.dialogueStyle}
+- Backstory: ${walkerA.backstoryNotes}
+
+## Walker B: ${walkerB.name} (#${walkerB.walkerNumber})
+- Age: ${walkerB.age}, from ${walkerB.homeState}
+- Personality: ${walkerB.personalityTraits.join(', ')}
+- Speaking style: ${walkerB.dialogueStyle}
+- Backstory: ${walkerB.backstoryNotes}
+
+${contextBlock}
+
+## Scene: ${scenePrompt}
+
+## Rules
+- Write a SHORT overheard exchange: 3 to 5 lines of dialogue.
+- Format each line as: SpeakerName: "Dialogue" or SpeakerName: *action/description*
+- Stay in character for both walkers. Reflect their personality, speaking style, and current physical/emotional state.
+- The conversation should feel natural — snippets caught while walking, not complete scenes.
+- Reflect the current game state: mile, weather, time, how many walkers remain, how tired they are.
+- The tone darkens as the walk progresses. Early = nervous energy. Late = exhaustion, despair, dark humor.
+- No preamble, no narration outside the lines. Just the exchange.`,
+    model: MODEL,
+    modelSettings: {
+      maxTokens: 250,
+    },
+  });
+
+  return new Response(
+    new ReadableStream({
+      async start(controller) {
+        const encoder = new TextEncoder();
+        const send = (event: string, data: string) => {
+          controller.enqueue(encoder.encode(`event: ${event}\ndata: ${data}\n\n`));
+        };
+
+        try {
+          const result = await run(overhearAgent, [
+            {
+              type: 'message' as const,
+              role: 'user' as const,
+              content: [{ type: 'input_text' as const, text: `Generate the overheard conversation between ${walkerA.name} and ${walkerB.name}.` }],
+            },
+          ], { stream: true });
+
+          let fullText = '';
+
+          for await (const event of result) {
+            if (event.type === 'raw_model_stream_event') {
+              const data = event.data as any;
+              if (data?.type === 'output_text_delta' && data.delta) {
+                fullText += data.delta;
+                send('token', JSON.stringify({ text: data.delta }));
+              }
+            }
+          }
+
+          await result.completed;
+          send('done', JSON.stringify({ text: fullText }));
+          controller.close();
+        } catch (err: any) {
+          console.error(`[Server] Overhear error:`, err.message || err);
+          send('error', JSON.stringify({ error: err.message || 'Overhear failed' }));
+          controller.close();
+        }
+      },
+    }),
+    {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      },
+    }
+  );
+});
+
+// --- Approach endpoint (NPC initiates conversation with player) ---
+interface ApproachRequest {
+  walker: WalkerProfile;
+  gameContext: GameContext;
+  approachType: string;
+  approachContext: string;
+}
+
+app.post('/api/approach', async (c) => {
+  const body = await c.req.json<ApproachRequest>();
+  const { walker, gameContext, approachType, approachContext } = body;
+
+  if (!walker || !gameContext || !approachType || !approachContext) {
+    return c.json({ error: 'Missing walker, gameContext, approachType, or approachContext' }, 400);
+  }
+
+  const contextBlock = buildGameContextBlock(gameContext);
+
+  const approachAgent = new Agent({
+    name: `Approach_${walker.name}`,
+    instructions: `You are ${walker.name}, Walker #${walker.walkerNumber}, a ${walker.age}-year-old from ${walker.homeState} competing in The Long Walk.
+
+## The Long Walk
+100 teenage boys walk south from the Maine/Canada border. Maintain 4 mph or get a warning. Three warnings = shot dead. Last one alive wins The Prize.
+
+## Who You Are
+- Name: ${walker.name}
+- Age: ${walker.age}
+- Home: ${walker.homeState}
+- Archetype: ${walker.psychologicalArchetype}
+- Personality: ${walker.personalityTraits.join(', ')}
+- Backstory: ${walker.backstoryNotes}
+- Speaking style: ${walker.dialogueStyle}
+
+${contextBlock}
+
+## Your Task
+You are approaching Walker #100 (${gameContext.playerName}) to say something.
+Approach type: ${approachType}
+Context: ${approachContext}
+
+## Rules
+- Write ONLY your opening line — 1 to 2 sentences. Nothing more.
+- Stay completely in character. You are a teenager walking to survive.
+- React to the current game state: weather, terrain, time, how tired you feel.
+- Your emotional state reflects your morale (${gameContext.walkerMorale}%), stamina (${gameContext.walkerStamina}%), and warnings (${gameContext.walkerWarnings}/3).
+- No quotation marks around your speech — just speak directly.
+- No narration, no stage directions. Just what you say.
+- Never break character. Never reference being an AI.`,
+    model: MODEL,
+    modelSettings: {
+      maxTokens: 100,
+    },
+  });
+
+  return new Response(
+    new ReadableStream({
+      async start(controller) {
+        const encoder = new TextEncoder();
+        const send = (event: string, data: string) => {
+          controller.enqueue(encoder.encode(`event: ${event}\ndata: ${data}\n\n`));
+        };
+
+        try {
+          const result = await run(approachAgent, [
+            {
+              type: 'message' as const,
+              role: 'user' as const,
+              content: [{ type: 'input_text' as const, text: `[NPC INITIATES CONVERSATION]\nYou see Walker #100 (${gameContext.playerName}) nearby. You want to say something to them.\nContext: ${approachContext}\nSpeak first. 1-2 sentences. Stay in character.` }],
+            },
+          ], { stream: true });
+
+          let fullText = '';
+
+          for await (const event of result) {
+            if (event.type === 'raw_model_stream_event') {
+              const data = event.data as any;
+              if (data?.type === 'output_text_delta' && data.delta) {
+                fullText += data.delta;
+                send('token', JSON.stringify({ text: data.delta }));
+              }
+            }
+          }
+
+          await result.completed;
+          send('done', JSON.stringify({ text: fullText }));
+          controller.close();
+        } catch (err: any) {
+          console.error(`[Server] Approach error for ${walker.name}:`, err.message || err);
+          send('error', JSON.stringify({ error: err.message || 'Approach failed' }));
           controller.close();
         }
       },

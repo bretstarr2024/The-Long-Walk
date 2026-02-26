@@ -47,6 +47,135 @@ export interface GameContextForAgent {
   walkerRelationship: number;
   walkerBehavioralState: string;
   recentEvents: string[];
+  // Arc context (optional — populated for Tier 1/2 walkers with arc data)
+  arcPhase?: string;
+  arcPromptHint?: string;
+  conversationCount?: number;
+  revealedFacts?: string[];
+  playerActions?: string[];
+  isAllied?: boolean;
+  allyStrain?: number;
+}
+
+export interface OverhearResult {
+  text: string;
+  error?: string;
+}
+
+export async function requestOverhear(
+  walkerA: WalkerProfile,
+  walkerB: WalkerProfile,
+  gameContext: GameContextForAgent,
+  scenePrompt: string,
+): Promise<OverhearResult> {
+  try {
+    const res = await fetch(`${SERVER_URL}/api/overhear`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ walkerA, walkerB, gameContext, scenePrompt }),
+      signal: AbortSignal.timeout(15000),
+    });
+
+    if (!res.ok || !res.body) {
+      return { text: '', error: `Server responded with ${res.status}` };
+    }
+
+    // Read SSE stream, collect full text from done event
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let fullText = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      let currentEvent = '';
+      let currentData = '';
+
+      for (const line of lines) {
+        if (line.startsWith('event: ')) {
+          currentEvent = line.slice(7).trim();
+        } else if (line.startsWith('data: ')) {
+          currentData = line.slice(6).trim();
+        } else if (line === '' && currentEvent && currentData) {
+          try {
+            const parsed = JSON.parse(currentData);
+            if (currentEvent === 'done') fullText = parsed.text;
+            else if (currentEvent === 'error') return { text: '', error: parsed.error };
+          } catch { /* ignore parse errors */ }
+          currentEvent = '';
+          currentData = '';
+        }
+      }
+    }
+
+    return { text: fullText };
+  } catch (err: any) {
+    return { text: '', error: err.message || 'Overhear request failed' };
+  }
+}
+
+export async function requestApproach(
+  walker: WalkerProfile,
+  gameContext: GameContextForAgent,
+  approachType: string,
+  approachContext: string,
+): Promise<OverhearResult> {
+  try {
+    const res = await fetch(`${SERVER_URL}/api/approach`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ walker, gameContext, approachType, approachContext }),
+      signal: AbortSignal.timeout(15000),
+    });
+
+    if (!res.ok || !res.body) {
+      return { text: '', error: `Server responded with ${res.status}` };
+    }
+
+    // Read SSE stream, collect full text from done event
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let fullText = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      let currentEvent = '';
+      let currentData = '';
+
+      for (const line of lines) {
+        if (line.startsWith('event: ')) {
+          currentEvent = line.slice(7).trim();
+        } else if (line.startsWith('data: ')) {
+          currentData = line.slice(6).trim();
+        } else if (line === '' && currentEvent && currentData) {
+          try {
+            const parsed = JSON.parse(currentData);
+            if (currentEvent === 'done') fullText = parsed.text;
+            else if (currentEvent === 'error') return { text: '', error: parsed.error };
+          } catch { /* ignore parse errors */ }
+          currentEvent = '';
+          currentData = '';
+        }
+      }
+    }
+
+    return { text: fullText };
+  } catch (err: any) {
+    return { text: '', error: err.message || 'Approach request failed' };
+  }
 }
 
 export async function isServerAvailable(): Promise<boolean> {

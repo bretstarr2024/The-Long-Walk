@@ -5,6 +5,10 @@
 import { GameState, WalkerState, NarrativeEntry, Act, HorrorTier } from './types';
 import { addNarrative, getAliveWalkers, getWalkerData, getWalkersRemaining, updateCurrentTime } from './state';
 import { getRouteSegment, getCrowdPhase, AMBIENT_DESCRIPTIONS } from './data/route';
+import {
+  checkForCrisis, updateActiveCrisis, updateBladder, updateTempEffects,
+  getActiveSpeedOverride, getActiveStaminaDrainMult,
+} from './crises';
 
 // ============================================================
 // MASTER TICK — called every frame
@@ -29,6 +33,15 @@ export function gameTick(state: GameState, realDeltaMs: number) {
   updateMorale(state, gameMinutes);
   updateClarity(state, gameMinutes);
   updateCooldowns(state, gameMinutes);
+
+  // Crisis system: bladder, temp effects, active crisis timer, new crisis check
+  updateBladder(state, gameMinutes);
+  updateTempEffects(state, gameMinutes);
+  if (state.player.activeCrisis) {
+    updateActiveCrisis(state, gameMinutes);
+  } else {
+    checkForCrisis(state, gameMinutes);
+  }
 
   // Check player warnings
   checkPlayerWarnings(state, gameMinutes);
@@ -79,6 +92,22 @@ function updateWorldTime(state: GameState, gameMinutes: number) {
 
 function updatePlayerSpeed(state: GameState) {
   const p = state.player;
+
+  // Crisis speed override takes priority
+  const crisisSpeed = p.activeCrisis?.speedOverride;
+  if (crisisSpeed != null) {
+    p.speed = crisisSpeed;
+    return;
+  }
+
+  // Temp effect speed override (post-crisis)
+  const tempSpeed = getActiveSpeedOverride(state);
+  if (tempSpeed != null) {
+    p.speed = Math.min(p.targetSpeed, tempSpeed);
+    p.speed = Math.max(0, p.speed);
+    return;
+  }
+
   // Actual speed limited by stamina and pain
   let maxSpeed = 7;
   if (p.pain > 90) maxSpeed = 4.5;
@@ -134,7 +163,9 @@ function updatePlayerStamina(state: GameState, gameMinutes: number) {
     if (allyNearby) modifier *= 0.9;
   }
 
-  const drain = baseRate * modifier * gameMinutes / 60; // convert to per-minute drain
+  // Crisis temp effect: stamina drain multiplier
+  const drainMult = getActiveStaminaDrainMult(state);
+  const drain = baseRate * modifier * drainMult * gameMinutes / 60;
   p.stamina = Math.max(0, p.stamina - drain);
 
   // Collapse check
@@ -212,25 +243,7 @@ function updatePain(state: GameState, gameMinutes: number) {
     p.pain = Math.min(100, p.pain + gameMinutes * 0.05);
   }
 
-  // Random cramps (5% per mile after mile 30)
-  if (miles > 30) {
-    const milesThisTick = (p.speed / 60) * gameMinutes;
-    if (Math.random() < 0.05 * milesThisTick) {
-      p.pain = Math.min(100, p.pain + 15);
-      p.speed = Math.min(p.speed, 3.8); // brief speed drop
-      addNarrative(state, 'A cramp seizes your calf muscle. You grit your teeth and push through it.', 'narration');
-    }
-  }
-
-  // Charley horse (1% per mile after mile 50)
-  if (miles > 50) {
-    const milesThisTick = (p.speed / 60) * gameMinutes;
-    if (Math.random() < 0.01 * milesThisTick) {
-      p.pain = Math.min(100, p.pain + 25);
-      p.speed = Math.min(p.speed, 3.5);
-      addNarrative(state, 'CHARLEY HORSE. Your leg locks up completely. You nearly go down. Keep walking. KEEP WALKING.', 'warning');
-    }
-  }
+  // Cramps and charley horses are now handled by the crisis system (cramp_lockup crisis)
 }
 
 // ============================================================
@@ -344,6 +357,7 @@ function issueWarning(state: GameState) {
   p.warnings++;
   p.warningTimer = 0;
   p.morale = Math.max(0, p.morale - 10);
+  state.lastWarningMile = state.world.milesWalked;
 
   const ordinal = p.warnings === 1 ? 'First' : p.warnings === 2 ? 'Second' : 'Third';
   addNarrative(state,
@@ -430,6 +444,19 @@ function updateNPCBehavior(state: GameState, w: WalkerState) {
     w.behavioralState = 'struggling';
   } else {
     w.behavioralState = 'steady';
+  }
+
+  // Decline narratives: Tier 1 walkers show visible deterioration 5-15 miles before elimination
+  if (data.tier === 1 && data.declineNarratives && distToElim > 0 && distToElim < 15) {
+    if (w.position === state.player.position && mile - w.lastDeclineNarrativeMile >= 3) {
+      // Pick a narrative based on how close to elimination
+      const idx = Math.min(
+        data.declineNarratives.length - 1,
+        Math.floor((15 - distToElim) / (15 / data.declineNarratives.length))
+      );
+      addNarrative(state, data.declineNarratives[idx], 'narration');
+      w.lastDeclineNarrativeMile = mile;
+    }
   }
 }
 
@@ -590,6 +617,16 @@ function eliminateWalker(state: GameState, w: WalkerState, data: import('./types
   w.behavioralState = 'eliminated';
   w.eliminatedAtMile = state.world.milesWalked;
   state.eliminationCount++;
+
+  // Tier 1 elimination scene: cinematic overlay if player had relationship > 20
+  if (data.tier === 1 && data.eliminationScene && w.relationship > 20 && !state.activeScene) {
+    state.activeScene = {
+      id: `elim_scene_${w.walkerNumber}`,
+      panels: data.eliminationScene,
+      currentPanel: 0,
+    };
+    state.isPaused = true;
+  }
 
   // Narrative
   const elimText = data.tier <= 2
@@ -752,6 +789,64 @@ export function updatePositionTransition(gameMinutes: number) {
   if (positionTransition.progress >= 1) {
     positionTransition = null;
   }
+}
+
+// ============================================================
+// FOOD/WATER SHARING WITH ALLIES
+// ============================================================
+
+export function shareFood(state: GameState): boolean {
+  const p = state.player;
+  if (p.foodCooldown > 0) return false;
+
+  // Find first nearby ally
+  const allyNum = p.alliances.find(num => {
+    const w = state.walkers.find(ws => ws.walkerNumber === num);
+    return w && w.alive && w.position === p.position;
+  });
+  if (allyNum == null) return false;
+
+  const ally = state.walkers.find(w => w.walkerNumber === allyNum);
+  if (!ally) return false;
+
+  // Burns player's food cooldown — ally gets the food, not you
+  p.foodCooldown = 30;
+  ally.stamina = Math.min(100, ally.stamina + 8);
+  ally.morale = Math.min(100, ally.morale + 5);
+  ally.relationship = Math.min(100, ally.relationship + 10);
+  p.morale = Math.min(100, p.morale + 5);
+
+  const data = getWalkerData(state, allyNum);
+  const name = data?.name || `Walker #${allyNum}`;
+  addNarrative(state, `You hand your food concentrate to ${name}. They eat it without a word. You won't eat for thirty minutes.`, 'narration');
+  ally.playerActions.push(`Shared food at mile ${Math.round(state.world.milesWalked)}`);
+  return true;
+}
+
+export function shareWater(state: GameState): boolean {
+  const p = state.player;
+  if (p.waterCooldown > 0) return false;
+
+  const allyNum = p.alliances.find(num => {
+    const w = state.walkers.find(ws => ws.walkerNumber === num);
+    return w && w.alive && w.position === p.position;
+  });
+  if (allyNum == null) return false;
+
+  const ally = state.walkers.find(w => w.walkerNumber === allyNum);
+  if (!ally) return false;
+
+  p.waterCooldown = 15;
+  ally.stamina = Math.min(100, ally.stamina + 5);
+  ally.morale = Math.min(100, ally.morale + 3);
+  ally.relationship = Math.min(100, ally.relationship + 8);
+  p.morale = Math.min(100, p.morale + 3);
+
+  const data = getWalkerData(state, allyNum);
+  const name = data?.name || `Walker #${allyNum}`;
+  addNarrative(state, `You pass your canteen to ${name}. They drink deep. You'll go without for fifteen minutes.`, 'narration');
+  ally.playerActions.push(`Shared water at mile ${Math.round(state.world.milesWalked)}`);
+  return true;
 }
 
 export function formAlliance(state: GameState, walkerNum: number): boolean {

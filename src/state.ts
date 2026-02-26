@@ -28,6 +28,10 @@ export function createDefaultPlayer(): PlayerState {
     waterCooldown: 0,
     alliances: [],
     flags: {},
+    bladder: 0,
+    activeCrisis: null,
+    lastCrisisMile: 0,
+    tempEffects: [],
   };
 }
 
@@ -64,8 +68,13 @@ export function createWalkerState(data: WalkerData): WalkerState {
     relationship: data.initialRelationship,
     behavioralState: 'steady',
     isAlliedWithPlayer: false,
+    allyStrain: 0,
     conversationFlags: {},
     eliminatedAtMile: null,
+    conversationCount: 0,
+    revealedFacts: [],
+    playerActions: [],
+    lastDeclineNarrativeMile: 0,
   };
 }
 
@@ -92,6 +101,14 @@ export function createInitialGameState(): GameState {
     playtimeMs: 0,
     lastTickTime: 0,
     introStep: 0,
+    lastOverheardMile: 0,
+    overhearInProgress: false,
+    activeScene: null,
+    activeApproach: null,
+    lastApproachMile: 0,
+    approachInProgress: false,
+    lastWarningMile: 0,
+    lastCrisisResolveMile: 0,
   };
 }
 
@@ -110,9 +127,12 @@ export function getWalkerState(state: GameState, num: number): WalkerState | und
 }
 
 export function getNearbyWalkers(state: GameState): WalkerState[] {
-  return state.walkers.filter(w =>
+  const atPosition = state.walkers.filter(w =>
     w.alive && w.position === state.player.position
-  ).slice(0, 8); // max 8 nearby
+  );
+  // Sort by tier so Tier 1 characters appear first
+  const tierOf = (w: WalkerState) => state.walkerData.find(d => d.walkerNumber === w.walkerNumber)?.tier ?? 3;
+  return atPosition.sort((a, b) => tierOf(a) - tierOf(b));
 }
 
 export function getWalkersRemaining(state: GameState): number {

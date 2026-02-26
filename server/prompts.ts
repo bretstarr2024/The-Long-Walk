@@ -39,6 +39,14 @@ export interface GameContext {
   walkerRelationship: number;
   walkerBehavioralState: string;
   recentEvents: string[];
+  // Arc context (optional — populated for Tier 1/2 walkers with arc data)
+  arcPhase?: string;
+  arcPromptHint?: string;
+  conversationCount?: number;
+  revealedFacts?: string[];
+  playerActions?: string[];
+  isAllied?: boolean;
+  allyStrain?: number;
 }
 
 export function buildSystemPrompt(walker: WalkerProfile): string {
@@ -90,6 +98,27 @@ export function buildGameContextBlock(ctx: GameContext): string {
     lines.push('', '## Recent Events');
     for (const e of ctx.recentEvents.slice(-5)) {
       lines.push(`- ${e}`);
+    }
+  }
+
+  // Arc context — injected for Tier 1/2 walkers with arc data
+  if (ctx.arcPhase) {
+    lines.push('', '## Your Arc with This Player');
+    lines.push(`Phase: ${ctx.arcPhase}`);
+    if (ctx.conversationCount !== undefined) {
+      lines.push(`Conversations so far: ${ctx.conversationCount}`);
+    }
+    if (ctx.arcPromptHint) {
+      lines.push(`Hint: ${ctx.arcPromptHint}`);
+    }
+    if (ctx.isAllied) {
+      lines.push(`Alliance: Yes${ctx.allyStrain && ctx.allyStrain > 30 ? ' (strained — they lean on you heavily)' : ''}`);
+    }
+    if (ctx.revealedFacts && ctx.revealedFacts.length > 0) {
+      lines.push(`What you've shared: ${ctx.revealedFacts.join(', ')}`);
+    }
+    if (ctx.playerActions && ctx.playerActions.length > 0) {
+      lines.push(`What they've done for you: ${ctx.playerActions.join(', ')}`);
     }
   }
 

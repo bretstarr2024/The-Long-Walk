@@ -4,13 +4,14 @@
 
 import { GameState, PlayerState, WalkerState, PackPosition, Reason } from './types';
 import { getNearbyWalkers, getWalkerData, getWalkersRemaining, addNarrative } from './state';
-import { setPlayerSpeed, setPlayerPosition, requestFood, requestWater } from './engine';
+import { setPlayerSpeed, setPlayerPosition, requestFood, requestWater, shareFood, shareWater } from './engine';
 import { startDialogue, selectDialogueOption, closeDialogue } from './dialogue';
 import { getEndingText, getGameStats, EndingType } from './narrative';
 import { getRouteSegment } from './data/route';
 import { initVisualization, updateVisualization } from './visualization';
 import { sendMessage, isServerAvailable, type WalkerProfile, type GameContextForAgent } from './agentClient';
 import { toggleMute, getIsMuted } from './audio';
+import { resolveCrisis } from './crises';
 
 let app: HTMLElement;
 let currentRenderedScreen: string = '';
@@ -24,6 +25,9 @@ let cachedWalkersHtml = '';
 let cachedActionsHtml = '';
 let cachedControlsHtml = '';
 let cachedDialogueHtml = '';
+let cachedCrisisHtml = '';
+let cachedSceneHtml = '';
+let cachedApproachHtml = '';
 let walkerPickerOpen = false;
 
 // ============================================================
@@ -69,6 +73,14 @@ function setupEventDelegation() {
       walkerPickerOpen = false;
       cachedActionsHtml = '';
       handleWalkerPicked(gameState, num);
+      return;
+    }
+
+    const crisisEl = target.closest('[data-crisis-option]') as HTMLElement;
+    if (crisisEl) {
+      const optionId = crisisEl.dataset.crisisOption!;
+      console.log('[UI] Crisis option:', optionId);
+      handleCrisisOption(gameState, optionId);
       return;
     }
 
@@ -132,7 +144,33 @@ function handleAction(action: string, state: GameState) {
     case 'speed-2': state.gameSpeed = 2; break;
     case 'speed-4': state.gameSpeed = 4; break;
     case 'speed-8': state.gameSpeed = 8; break;
+    case 'share-food': handleShareFood(state); break;
+    case 'share-water': handleShareWater(state); break;
+    case 'scene-next': handleSceneNext(state); break;
+    case 'scene-close': handleSceneClose(state); break;
+    case 'approach-reply': handleApproachReply(state); break;
+    case 'approach-nod': handleApproachNod(state); break;
+    case 'approach-ignore': handleApproachIgnore(state); break;
+    case 'dossier-talk': handleDossierTalk(state); break;
+    case 'dossier-close': activeDossierWalker = null; cachedActionsHtml = ''; break;
   }
+}
+
+function handleCrisisOption(state: GameState, optionId: string) {
+  if (!state.player.activeCrisis) return;
+  resolveCrisis(state, optionId);
+  cachedCrisisHtml = '';
+  cachedActionsHtml = '';
+}
+
+function handleShareFood(state: GameState) {
+  shareFood(state);
+  cachedActionsHtml = '';
+}
+
+function handleShareWater(state: GameState) {
+  shareWater(state);
+  cachedActionsHtml = '';
 }
 
 function changePosition(state: GameState, pos: PackPosition) {
@@ -207,7 +245,13 @@ export function closeWalkerPicker() {
 
 function closeLLMDialogue(state: GameState) {
   if (!state.llmDialogue) return;
-  const name = state.llmDialogue.walkerName;
+  const dlg = state.llmDialogue;
+  // Increment conversation count if at least one exchange happened
+  if (dlg.messages.length >= 2) {
+    const w = state.walkers.find(ws => ws.walkerNumber === dlg.walkerId);
+    if (w) w.conversationCount++;
+  }
+  const name = dlg.walkerName;
   state.llmDialogue = null;
   addNarrative(state, `You stop talking to ${name} and focus on walking.`, 'narration');
 }
@@ -219,6 +263,24 @@ function buildGameContext(state: GameState, walkerNum: number): GameContextForAg
     .slice(-10)
     .filter(e => e.type === 'elimination' || e.type === 'event' || e.type === 'warning')
     .map(e => e.text);
+
+  // Compute arc phase for this walker
+  const walkerData = getWalkerData(state, walkerNum);
+  let arcPhase: string | undefined;
+  let arcPromptHint: string | undefined;
+  if (walkerData?.arcStages) {
+    const mile = state.world.milesWalked;
+    const convos = w.conversationCount;
+    // Find the latest arc stage the walker qualifies for
+    for (let i = walkerData.arcStages.length - 1; i >= 0; i--) {
+      const stage = walkerData.arcStages[i];
+      if (mile >= stage.mileRange[0] && convos >= stage.minConversations) {
+        arcPhase = stage.arcPhase;
+        arcPromptHint = stage.promptHint;
+        break;
+      }
+    }
+  }
 
   return {
     milesWalked: state.world.milesWalked,
@@ -243,6 +305,14 @@ function buildGameContext(state: GameState, walkerNum: number): GameContextForAg
     walkerRelationship: w.relationship,
     walkerBehavioralState: w.behavioralState,
     recentEvents,
+    // Arc context
+    arcPhase,
+    arcPromptHint,
+    conversationCount: w.conversationCount,
+    revealedFacts: w.revealedFacts.length > 0 ? w.revealedFacts : undefined,
+    playerActions: w.playerActions.length > 0 ? w.playerActions : undefined,
+    isAllied: w.isAlliedWithPlayer || undefined,
+    allyStrain: w.isAlliedWithPlayer ? w.allyStrain : undefined,
   };
 }
 
@@ -325,6 +395,10 @@ async function handleSendChat(state: GameState) {
       dlg.messages.push({ role: 'walker', text: `[Error: ${err.message || 'Connection failed'}]` });
     }
   }
+
+  // Refocus input so the player can keep typing
+  const inp = document.getElementById('llm-chat-input') as HTMLInputElement;
+  if (inp) inp.focus();
 }
 
 function applyGameEffect(state: GameState, effect: { effectType: string; walkerId?: number; delta?: number; key?: string; value?: boolean; text?: string }) {
@@ -352,6 +426,12 @@ function applyGameEffect(state: GameState, effect: { effectType: string; walkerI
     case 'info':
       if (effect.text) {
         addNarrative(state, effect.text, 'narration');
+        // Track revealed facts on the walker
+        if (w) {
+          w.revealedFacts.push(effect.text);
+          // Cap at 20 facts
+          if (w.revealedFacts.length > 20) w.revealedFacts = w.revealedFacts.slice(-20);
+        }
         console.log(`[Effect] Info shared: ${effect.text}`);
       }
       break;
@@ -383,9 +463,21 @@ function handleThink(state: GameState) {
   state.player.morale = Math.min(100, state.player.morale + boost);
 }
 
+// --- Walker Dossier ---
+let activeDossierWalker: number | null = null;
+
 function handleWalkerClick(state: GameState, num: number) {
-  // Clicking a walker in the nearby list acts the same as picking them from the Talk menu
   console.log('[Walker Click]', num);
+  // Open dossier for this walker
+  activeDossierWalker = num;
+  cachedActionsHtml = ''; // force re-render
+}
+
+function handleDossierTalk(state: GameState) {
+  if (activeDossierWalker === null) return;
+  const num = activeDossierWalker;
+  activeDossierWalker = null;
+  cachedActionsHtml = '';
   handleWalkerPicked(state, num);
 }
 
@@ -592,6 +684,9 @@ function renderGame(state: GameState) {
     cachedActionsHtml = '';
     cachedControlsHtml = '';
     cachedDialogueHtml = '';
+    cachedCrisisHtml = '';
+    cachedSceneHtml = '';
+    cachedApproachHtml = '';
   }
 
   updateHeader(state);
@@ -600,6 +695,9 @@ function renderGame(state: GameState) {
   updateWalkersPanel(state);
   updateActionsPanel(state);
   updateGameControls(state);
+  updateSceneOverlay(state);
+  updateApproachBanner(state);
+  updateCrisisOverlay(state);
   updateDialogueOverlay(state);
   updateLLMChatOverlay(state);
 
@@ -634,6 +732,9 @@ function createGameStructure() {
         <div class="actions-panel" id="actions-panel"></div>
       </div>
       <div class="game-controls" id="game-controls"></div>
+      <div id="scene-container"></div>
+      <div id="approach-container"></div>
+      <div id="crisis-container"></div>
       <div id="dialogue-container"></div>
       <div id="llm-chat-container"></div>
     </div>
@@ -722,6 +823,7 @@ function createStatusPanel(el: HTMLElement, state: GameState) {
     <div class="stat-row"><span class="stat-label" style="width:28px">PAI</span><div class="stat-bar"><div class="stat-bar-fill" id="sp-bar-pai"></div></div><span class="stat-value" id="sp-val-pai" style="width:24px;text-align:right;font-size:0.7rem;"></span></div>
     <div class="stat-row"><span class="stat-label" style="width:28px">MOR</span><div class="stat-bar"><div class="stat-bar-fill" id="sp-bar-mor"></div></div><span class="stat-value" id="sp-val-mor" style="width:24px;text-align:right;font-size:0.7rem;"></span></div>
     <div class="stat-row"><span class="stat-label" style="width:28px">CLR</span><div class="stat-bar"><div class="stat-bar-fill" id="sp-bar-clr"></div></div><span class="stat-value" id="sp-val-clr" style="width:24px;text-align:right;font-size:0.7rem;"></span></div>
+    <div class="stat-row"><span class="stat-label" style="width:28px">BLD</span><div class="stat-bar"><div class="stat-bar-fill" id="sp-bar-bld"></div></div><span class="stat-value" id="sp-val-bld" style="width:24px;text-align:right;font-size:0.7rem;"></span></div>
     <div class="env-info">
       <div id="sp-weather"></div>
       <div id="sp-terrain"></div>
@@ -834,6 +936,7 @@ function updateStatusPanel(state: GameState) {
   updateStatBar('pai', p.pain, true);
   updateStatBar('mor', p.morale, false);
   updateStatBar('clr', p.clarity, false);
+  updateStatBar('bld', p.bladder, true);
 
   // Environment info
   setText('sp-weather', `Weather: ${w.weather.replace('_', ' ')}`);
@@ -895,7 +998,7 @@ function updateWalkersPanel(state: GameState) {
   }).join('');
 
   const html = `
-    <div class="panel-title">NEARBY WALKERS (${state.player.position})</div>
+    <div class="panel-title">NEARBY WALKERS (${state.player.position.toUpperCase()}) — ${nearby.length}</div>
     ${items || '<div style="color:var(--text-dim);font-size:0.75rem;padding:0.5rem;">No walkers nearby.</div>'}
   `;
 
@@ -905,16 +1008,73 @@ function updateWalkersPanel(state: GameState) {
   }
 }
 
+// --- Walker dossier ---
+function renderDossier(state: GameState, walkerNum: number): string {
+  const w = state.walkers.find(ws => ws.walkerNumber === walkerNum);
+  const data = getWalkerData(state, walkerNum);
+  if (!w || !data) return '<div class="panel-title">Unknown Walker</div>';
+
+  const relLabel = w.isAlliedWithPlayer ? 'Allied'
+    : w.relationship > 40 ? 'Friendly'
+    : w.relationship > 10 ? 'Curious'
+    : w.relationship < -10 ? 'Hostile'
+    : 'Neutral';
+  const statusLabel = !w.alive ? 'Eliminated'
+    : w.behavioralState === 'breaking_down' ? 'Breaking Down'
+    : w.behavioralState === 'struggling' ? 'Struggling'
+    : 'Steady';
+  const canTalk = w.alive && state.llmAvailable && data.tier <= 2;
+
+  let factsHtml = '';
+  if (w.revealedFacts.length > 0) {
+    factsHtml = `<div class="dossier-section">
+      <div class="dossier-label">WHAT YOU KNOW</div>
+      ${w.revealedFacts.map(f => `<div class="dossier-fact">${f}</div>`).join('')}
+    </div>`;
+  }
+
+  return `
+    <div class="dossier-panel">
+      <div class="dossier-header">
+        <div class="dossier-name">${data.name.toUpperCase()}</div>
+        <div class="dossier-num">#${data.walkerNumber}</div>
+      </div>
+      <div class="dossier-meta">${data.age} | ${data.homeState} | ${data.psychologicalArchetype}</div>
+      <div class="dossier-stats">
+        <div>Relationship: <span class="walker-disposition ${relLabel.toLowerCase()}">${relLabel}</span> (${w.relationship})</div>
+        <div>Talks: ${w.conversationCount} | Alliance: ${w.isAlliedWithPlayer ? 'Yes' : 'No'}</div>
+        <div>Status: ${statusLabel} | Warnings: ${w.warnings}/3</div>
+      </div>
+      ${factsHtml}
+      <div class="dossier-actions">
+        ${canTalk ? '<button class="action-btn dossier-talk-btn" data-action="dossier-talk">Talk</button>' : ''}
+        <button class="action-btn" data-action="dossier-close">Close</button>
+      </div>
+    </div>
+  `;
+}
+
 // --- Actions panel: cached ---
 function updateActionsPanel(state: GameState) {
   const el = document.getElementById('actions-panel');
   if (!el) return;
 
+  // Show dossier if active
+  if (activeDossierWalker !== null) {
+    const dossierHtml = renderDossier(state, activeDossierWalker);
+    if (dossierHtml !== cachedActionsHtml) {
+      el.innerHTML = dossierHtml;
+      cachedActionsHtml = dossierHtml;
+    }
+    return;
+  }
+
   const p = state.player;
   const nearby = getNearbyWalkers(state);
-  const foodDisabled = p.foodCooldown > 0;
-  const waterDisabled = p.waterCooldown > 0;
-  const talkDisabled = nearby.length === 0;
+  const inCrisis = !!p.activeCrisis;
+  const foodDisabled = p.foodCooldown > 0 || inCrisis;
+  const waterDisabled = p.waterCooldown > 0 || inCrisis;
+  const talkDisabled = nearby.length === 0 || inCrisis;
 
   // Close picker if LLM dialogue opened
   if (state.llmDialogue) walkerPickerOpen = false;
@@ -945,6 +1105,29 @@ function updateActionsPanel(state: GameState) {
       </div>`;
   }
 
+  // Share buttons: only when ally is nearby at same position and cooldowns are ready
+  let shareHtml = '';
+  if (!inCrisis) {
+    const nearbyAlly = state.player.alliances.find(num => {
+      const w = state.walkers.find(ws => ws.walkerNumber === num);
+      return w && w.alive && w.position === state.player.position;
+    });
+    if (nearbyAlly != null) {
+      const allyData = getWalkerData(state, nearbyAlly);
+      const allyName = allyData ? allyData.name : `#${nearbyAlly}`;
+      const shareFoodDisabled = p.foodCooldown > 0;
+      const shareWaterDisabled = p.waterCooldown > 0;
+      shareHtml = `
+        <div class="share-divider">SHARE WITH ${allyName.toUpperCase()}</div>
+        <button class="action-btn share-btn" data-action="share-food" ${shareFoodDisabled ? 'disabled' : ''}>
+          Share Food ${shareFoodDisabled ? `(${Math.ceil(p.foodCooldown)}m)` : ''}
+        </button>
+        <button class="action-btn share-btn" data-action="share-water" ${shareWaterDisabled ? 'disabled' : ''}>
+          Share Water ${shareWaterDisabled ? `(${Math.ceil(p.waterCooldown)}m)` : ''}
+        </button>`;
+    }
+  }
+
   const html = `
     <div class="panel-title">ACTIONS</div>
     <button class="action-btn ${walkerPickerOpen ? 'active' : ''}" data-action="talk" ${talkDisabled ? 'disabled' : ''}>Talk</button>
@@ -955,8 +1138,9 @@ function updateActionsPanel(state: GameState) {
     <button class="action-btn" data-action="water" ${waterDisabled ? 'disabled' : ''}>
       Request Water ${waterDisabled ? `(${Math.ceil(p.waterCooldown)}m)` : ''}
     </button>
-    <button class="action-btn" data-action="observe">Look Around</button>
-    <button class="action-btn" data-action="think">Think About Prize</button>
+    ${shareHtml}
+    <button class="action-btn" data-action="observe" ${inCrisis ? 'disabled' : ''}>Look Around</button>
+    <button class="action-btn" data-action="think" ${inCrisis ? 'disabled' : ''}>Think About Prize</button>
   `;
 
   if (html !== cachedActionsHtml) {
@@ -982,6 +1166,221 @@ function updateGameControls(state: GameState) {
   if (html !== cachedControlsHtml) {
     el.innerHTML = html;
     cachedControlsHtml = html;
+  }
+}
+
+// --- Scene handlers ---
+function handleSceneNext(state: GameState) {
+  if (!state.activeScene) return;
+  if (state.activeScene.currentPanel < state.activeScene.panels.length - 1) {
+    state.activeScene.currentPanel++;
+    cachedSceneHtml = '';
+  }
+}
+
+function handleSceneClose(state: GameState) {
+  if (!state.activeScene) return;
+  // Add scene text to narrative log for posterity
+  for (const panel of state.activeScene.panels) {
+    addNarrative(state, panel.text, panel.type);
+  }
+  state.activeScene = null;
+  state.isPaused = false;
+  cachedSceneHtml = '';
+}
+
+// --- Approach handlers ---
+function handleApproachReply(state: GameState) {
+  if (!state.activeApproach) return;
+  const approach = state.activeApproach;
+  // Open LLM chat with this walker, pre-seeded with their opening line
+  const walkerNum = approach.walkerId;
+  const w = state.walkers.find(ws => ws.walkerNumber === walkerNum);
+  const data = getWalkerData(state, walkerNum);
+  if (!w || !w.alive || !data) {
+    state.activeApproach = null;
+    cachedApproachHtml = '';
+    return;
+  }
+  // Set up LLM dialogue with approach text as first walker message
+  if (state.llmDialogue) state.llmDialogue = null;
+  state.llmDialogue = {
+    walkerId: walkerNum,
+    walkerName: data.name,
+    messages: [{ role: 'walker', text: approach.text }],
+    isStreaming: false,
+    streamBuffer: '',
+  };
+  state.activeApproach = null;
+  cachedApproachHtml = '';
+}
+
+function handleApproachNod(state: GameState) {
+  if (!state.activeApproach) return;
+  const w = state.walkers.find(ws => ws.walkerNumber === state.activeApproach!.walkerId);
+  if (w) {
+    w.relationship = Math.min(100, w.relationship + 3);
+    w.conversationCount++;
+  }
+  addNarrative(state, `You nod at ${state.activeApproach.walkerName}. They seem satisfied.`, 'narration');
+  state.activeApproach = null;
+  cachedApproachHtml = '';
+}
+
+function handleApproachIgnore(state: GameState) {
+  if (!state.activeApproach) return;
+  const w = state.walkers.find(ws => ws.walkerNumber === state.activeApproach!.walkerId);
+  if (w) {
+    w.relationship = Math.max(-100, w.relationship - 2);
+  }
+  addNarrative(state, `You keep your eyes ahead. ${state.activeApproach.walkerName} falls back.`, 'narration');
+  state.activeApproach = null;
+  cachedApproachHtml = '';
+}
+
+// --- Scene overlay: cached ---
+function updateSceneOverlay(state: GameState) {
+  const container = document.getElementById('scene-container');
+  if (!container) return;
+
+  if (!state.activeScene) {
+    if (cachedSceneHtml !== '') {
+      container.innerHTML = '';
+      cachedSceneHtml = '';
+    }
+    return;
+  }
+
+  const scene = state.activeScene;
+  const panel = scene.panels[scene.currentPanel];
+  const isLast = scene.currentPanel >= scene.panels.length - 1;
+
+  const html = `
+    <div class="scene-overlay">
+      <div class="scene-box">
+        <div class="scene-text">${panel.text}</div>
+        <div class="scene-footer">
+          <span class="scene-counter">${scene.currentPanel + 1}/${scene.panels.length}</span>
+          ${isLast
+            ? '<button class="scene-btn" data-action="scene-close">Continue Walking</button>'
+            : '<button class="scene-btn" data-action="scene-next">>>> </button>'}
+        </div>
+      </div>
+    </div>
+  `;
+
+  if (html !== cachedSceneHtml) {
+    container.innerHTML = html;
+    cachedSceneHtml = html;
+  }
+}
+
+// --- Approach banner: cached ---
+function updateApproachBanner(state: GameState) {
+  const container = document.getElementById('approach-container');
+  if (!container) return;
+
+  // Don't show approach during crisis or scene
+  if (!state.activeApproach || state.player.activeCrisis || state.activeScene) {
+    if (cachedApproachHtml !== '') {
+      container.innerHTML = '';
+      cachedApproachHtml = '';
+    }
+    return;
+  }
+
+  const approach = state.activeApproach;
+
+  // Auto-dismiss after 30 real seconds → defaults to "Nod"
+  if (Date.now() - approach.startTime > 30000) {
+    handleApproachNod(state);
+    return;
+  }
+
+  // Still streaming from LLM
+  const displayText = approach.isStreaming
+    ? (approach.streamBuffer || '...')
+    : approach.text;
+
+  const html = `
+    <div class="approach-banner">
+      <div class="approach-intro">${approach.walkerName} falls into step beside you.</div>
+      <div class="approach-text">"${displayText}"</div>
+      <div class="approach-actions">
+        <button class="approach-btn approach-reply" data-action="approach-reply" ${approach.isStreaming ? 'disabled' : ''}>Reply</button>
+        <button class="approach-btn approach-nod" data-action="approach-nod">Nod</button>
+        <button class="approach-btn approach-ignore" data-action="approach-ignore">Ignore</button>
+      </div>
+    </div>
+  `;
+
+  if (html !== cachedApproachHtml) {
+    container.innerHTML = html;
+    cachedApproachHtml = html;
+  }
+}
+
+// --- Crisis overlay: cached ---
+function updateCrisisOverlay(state: GameState) {
+  const container = document.getElementById('crisis-container');
+  if (!container) return;
+
+  const crisis = state.player.activeCrisis;
+  if (!crisis) {
+    if (cachedCrisisHtml !== '') {
+      container.innerHTML = '';
+      cachedCrisisHtml = '';
+    }
+    return;
+  }
+
+  const timerPct = Math.max(0, (crisis.timeRemaining / crisis.timeLimit) * 100);
+  const timerColor = timerPct > 50 ? 'var(--accent-blue)' : timerPct > 20 ? 'var(--accent-amber)' : 'var(--accent-red)';
+  const timerSecs = Math.ceil(crisis.timeRemaining * 60); // game-minutes to seconds display
+
+  // Check if ally is nearby for ally-required options
+  const hasAllyNearby = state.player.alliances.some(num => {
+    const w = state.walkers.find(ws => ws.walkerNumber === num);
+    return w && w.alive && w.position === state.player.position;
+  });
+
+  const optionsHtml = crisis.options.map((opt, i) => {
+    const disabled = opt.requiresAlly && !hasAllyNearby;
+    const allyTag = opt.requiresAlly ? '<span class="crisis-ally-tag">ALLY</span>' : '';
+    return `
+      <button class="crisis-option ${disabled ? 'disabled' : ''} ${opt.requiresAlly ? 'ally-option' : ''}"
+        data-crisis-option="${opt.id}" ${disabled ? 'disabled' : ''}>
+        <span class="crisis-option-key">${i + 1}</span>
+        <span class="crisis-option-text">
+          <strong>${opt.label}</strong> ${allyTag}
+          <span class="crisis-option-desc">${opt.description}</span>
+        </span>
+      </button>`;
+  }).join('');
+
+  const html = `
+    <div class="crisis-overlay">
+      <div class="crisis-box">
+        <div class="crisis-header">
+          <div class="crisis-title">${crisis.title}</div>
+          <div class="crisis-timer">
+            <span class="crisis-timer-text">${timerSecs}s</span>
+            <div class="crisis-timer-bar">
+              <div class="crisis-timer-fill" style="width:${timerPct}%;background:${timerColor};"></div>
+            </div>
+          </div>
+        </div>
+        <div class="crisis-description">${crisis.description}</div>
+        <div class="crisis-options">
+          ${optionsHtml}
+        </div>
+      </div>
+    </div>
+  `;
+
+  if (html !== cachedCrisisHtml) {
+    container.innerHTML = html;
+    cachedCrisisHtml = html;
   }
 }
 
@@ -1174,8 +1573,12 @@ function updateLLMChatOverlay(state: GameState) {
   // Update input/button disabled state directly (no rebuild)
   const inp = document.getElementById('llm-chat-input') as HTMLInputElement;
   const sendBtn = document.getElementById('llm-send-btn') as HTMLButtonElement;
+  const wasDisabled = inp?.disabled;
   if (inp) inp.disabled = dlg.isStreaming;
   if (sendBtn) sendBtn.disabled = dlg.isStreaming;
+
+  // Refocus input when streaming finishes (disabled → enabled transition)
+  if (inp && wasDisabled && !dlg.isStreaming) inp.focus();
 
   // Update relationship label
   const w = state.walkers.find(ws => ws.walkerNumber === dlg.walkerId);

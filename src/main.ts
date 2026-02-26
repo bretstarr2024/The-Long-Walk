@@ -3,12 +3,15 @@
 // ============================================================
 
 import './styles.css';
-import { createInitialGameState } from './state';
+import { createInitialGameState, addNarrative } from './state';
 import { gameTick } from './engine';
-import { checkScriptedEvents, checkHallucinations, checkEnding } from './narrative';
+import { checkScriptedEvents, checkHallucinations, checkOverheards, checkEnding, checkAbsenceEffects } from './narrative';
+import { checkAmbientOverhear } from './overhear';
+import { checkApproach } from './approach';
 import { initUI, render, setEnding, closeWalkerPicker } from './ui';
 import { closeDialogue } from './dialogue';
 import { isServerAvailable } from './agentClient';
+import { resolveCrisis } from './crises';
 import { GameState } from './types';
 import {
   initAudio, ensureResumed, startAmbientDrone, stopAmbientDrone,
@@ -66,11 +69,21 @@ function gameLoop(timestamp: number) {
   // Cap delta to prevent huge jumps (e.g. tab was backgrounded)
   const cappedDelta = Math.min(deltaMs, 200);
 
+  // Enforce pause while scene is active
+  if (state.activeScene && !state.isPaused) {
+    state.isPaused = true;
+  }
+
   if (state.screen === 'game' && !state.isPaused && state.player.alive) {
     // Start ambient drone when game begins
     if (!droneStarted && isAudioInitialized()) {
       startAmbientDrone();
       droneStarted = true;
+    }
+
+    // Force game speed to 1x during active crisis
+    if (state.player.activeCrisis && state.gameSpeed > 1) {
+      state.gameSpeed = 1;
     }
 
     // Snapshot narrative count before tick to detect new events
@@ -79,11 +92,23 @@ function gameLoop(timestamp: number) {
     // Run game systems every frame for smooth simulation
     gameTick(state, cappedDelta);
 
-    // Check scripted events
+    // Check scripted events (may trigger scene overlay which pauses)
     checkScriptedEvents(state);
+
+    // Check overheard conversations (scripted)
+    checkOverheards(state);
+
+    // Check ambient LLM overheards
+    checkAmbientOverhear(state);
 
     // Check hallucinations
     checkHallucinations(state);
+
+    // Check absence effects (ghost references for dead Tier 1 walkers)
+    checkAbsenceEffects(state);
+
+    // Check NPC approaches (they come to you)
+    checkApproach(state);
 
     // Trigger sounds for new narrative entries
     for (let i = prevNarrativeCount; i < state.narrativeLog.length; i++) {
@@ -138,6 +163,45 @@ document.addEventListener('keydown', (e) => {
   // Don't capture shortcuts when typing in an input field (but always allow Escape)
   const tag = (document.activeElement as HTMLElement)?.tagName;
   if ((tag === 'INPUT' || tag === 'TEXTAREA') && e.key !== 'Escape') return;
+
+  // During active scene: Space/Enter advance, Escape closes
+  if (state.activeScene) {
+    if (e.key === ' ' || e.key === 'Enter') {
+      e.preventDefault();
+      if (state.activeScene.currentPanel < state.activeScene.panels.length - 1) {
+        state.activeScene.currentPanel++;
+      } else {
+        // Last panel — close scene
+        for (const panel of state.activeScene.panels) {
+          addNarrative(state, panel.text, panel.type);
+        }
+        state.activeScene = null;
+        state.isPaused = false;
+      }
+      return;
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      for (const panel of state.activeScene.panels) {
+        addNarrative(state, panel.text, panel.type);
+      }
+      state.activeScene = null;
+      state.isPaused = false;
+      return;
+    }
+    return; // Swallow all other keys during scene
+  }
+
+  // During active crisis: keys 1-4 select crisis options
+  const crisis = state.player.activeCrisis;
+  if (crisis && e.key >= '1' && e.key <= '4') {
+    e.preventDefault();
+    const idx = parseInt(e.key) - 1;
+    if (idx < crisis.options.length) {
+      resolveCrisis(state, crisis.options[idx].id);
+    }
+    return;
+  }
 
   switch (e.key) {
     case ' ':

@@ -6,7 +6,7 @@
 // Walker #100 = Player
 // ============================================================
 
-import { WalkerData } from '../types';
+import { WalkerData, NPCRelationship } from '../types';
 
 // --- TIER 1: Major NPCs ---
 
@@ -28,6 +28,23 @@ const TIER_1: WalkerData[] = [
     physicalState: 'average',
     psychologicalArchetype: 'The Everyman',
     walkingPosition: 'middle',
+    arcStages: [
+      { arcPhase: 'introduction', mileRange: [0, 20], minConversations: 0, promptHint: 'Friendly but guarded. Testing if the player is worth knowing. Talk about Maine, the crowd, the strangeness of the first miles.' },
+      { arcPhase: 'opening_up', mileRange: [20, 80], minConversations: 2, promptHint: 'Bonding. You talk about Jan, about home, about why anyone would do this. Starting to lean on the player.' },
+      { arcPhase: 'vulnerability', mileRange: [80, 200], minConversations: 4, promptHint: 'The walk is breaking you. You think about your father being Squaded. You wonder if you entered because you wanted to die. Be honest.' },
+      { arcPhase: 'crisis', mileRange: [200, 370], minConversations: 6, promptHint: 'Friends are dying. McVries is fading. You are being stripped down to something raw. Talk about what survival costs.' },
+      { arcPhase: 'farewell', mileRange: [370, 400], minConversations: 0, promptHint: 'Delirium. You might see Jan in the crowd. You talk to people who aren\'t there. But when you talk to the player, there are flashes of lucidity. Say what matters.' },
+    ],
+    declineNarratives: [
+      'Garraty\'s eyes have a thousand-yard stare. He keeps looking into the crowd as if searching for someone.',
+      'Garraty stumbles, catches himself. He laughs — a hollow, broken sound.',
+      'Garraty is muttering to himself. You catch the name "Jan" repeated like a prayer.',
+    ],
+    eliminationScene: [
+      { text: 'Garraty\'s pace falters. His eyes are glassy, unfocused. He\'s looking at something on the road ahead that no one else can see.', type: 'narration' },
+      { text: '"There," he whispers. "There it is. Can you see it?" He walks toward the dark figure on the road. Or perhaps it walks toward him.', type: 'narration' },
+      { text: 'Ray Garraty, Walker #47. The Everyman. Gone into whatever waits at the end of the road.', type: 'elimination' },
+    ],
   },
   {
     name: 'Peter McVries',
@@ -46,6 +63,23 @@ const TIER_1: WalkerData[] = [
     physicalState: 'average',
     psychologicalArchetype: 'The Self-Appointed Martyr',
     walkingPosition: 'middle',
+    arcStages: [
+      { arcPhase: 'introduction', mileRange: [0, 20], minConversations: 0, promptHint: 'Sizing up the player. Sharp, sarcastic, testing. You want to see if they\'re real or just another fool walking to die.' },
+      { arcPhase: 'opening_up', mileRange: [20, 80], minConversations: 2, promptHint: 'Starting to trust the player. Still deflecting with humor, but cracks are showing. You might mention Priscilla, the scar.' },
+      { arcPhase: 'vulnerability', mileRange: [80, 200], minConversations: 4, promptHint: 'The mask is slipping. You can talk about the scar — self-inflicted, after Priscilla. You entered the Walk to die. Be honest about that.' },
+      { arcPhase: 'crisis', mileRange: [200, 340], minConversations: 6, promptHint: 'Questioning everything. Is The Prize real? Does winning mean anything? You\'re raw and philosophical. The wit is still there but it hurts now.' },
+      { arcPhase: 'farewell', mileRange: [340, 355], minConversations: 0, promptHint: 'You\'ve accepted what\'s coming. You\'ve been walking to die from the beginning. You\'re at peace. You want the player to be okay after you\'re gone.' },
+    ],
+    declineNarratives: [
+      'McVries is quieter now. The sarcasm has dried up. He walks with a strange calm.',
+      'McVries looks at the road behind him, then ahead. As if measuring the distance to something only he can see.',
+      'McVries catches your eye and smiles. It\'s the most genuine smile you\'ve seen from him. It terrifies you.',
+    ],
+    eliminationScene: [
+      { text: 'McVries slows. Not stumbling, not failing — slowing. Deliberately. He sits down on the edge of the road as if he\'s found a park bench.', type: 'narration' },
+      { text: '"I\'ve been walking toward this since the starting line," he says quietly. "I think you knew that." His face is calm. Serene. He has chosen this.', type: 'narration' },
+      { text: 'Peter McVries, Walker #61. The Self-Appointed Martyr. He didn\'t fall. He stopped.', type: 'elimination' },
+    ],
   },
   {
     name: 'Stebbins',
@@ -64,6 +98,21 @@ const TIER_1: WalkerData[] = [
     physicalState: 'strong',
     psychologicalArchetype: 'The Oracle',
     walkingPosition: 'back',
+    arcStages: [
+      { arcPhase: 'introduction', mileRange: [0, 30], minConversations: 0, promptHint: 'You walk alone at the back. The player has to come to you. Speak rarely. Short, cutting observations. "Talking is a waste of energy."' },
+      { arcPhase: 'opening_up', mileRange: [30, 150], minConversations: 1, promptHint: 'You warn about alliances. Cryptic, cold. "The ones who walk together die together." You know more than you let on.' },
+      { arcPhase: 'vulnerability', mileRange: [150, 350], minConversations: 3, promptHint: 'Cracks in the armor. You are desperately lonely. You might hint that you know the Major personally. Be bitter, not self-pitying.' },
+      { arcPhase: 'farewell', mileRange: [350, 400], minConversations: 0, promptHint: 'The revelation: The Major is your father. You entered to prove yourself to a man who sees you as disposable. You believed he would intervene. He won\'t.' },
+    ],
+    declineNarratives: [
+      'Stebbins is further back than usual. His stride, always precise, has developed a slight hitch.',
+      'For the first time, Stebbins looks surprised. As if the Walk is something that happens to other people.',
+    ],
+    eliminationScene: [
+      { text: 'Stebbins stumbles. For a moment his expression is one of pure surprise — not at the stumble, but at the realization that no one is coming to save him.', type: 'narration' },
+      { text: '"He was supposed to..." Stebbins whispers. He doesn\'t finish the sentence. The Major\'s illegitimate son, walking to prove himself to a father who never looked back.', type: 'narration' },
+      { text: 'Stebbins, Walker #88. The Oracle. He believed the system had a heart. It doesn\'t.', type: 'elimination' },
+    ],
   },
   {
     name: 'Hank Olson',
@@ -82,6 +131,23 @@ const TIER_1: WalkerData[] = [
     physicalState: 'strong',
     psychologicalArchetype: 'The False Champion',
     walkingPosition: 'front',
+    arcStages: [
+      { arcPhase: 'introduction', mileRange: [0, 15], minConversations: 0, promptHint: 'All swagger. "I\'m gonna win this thing." Loud, boastful, dismissive. You genuinely believe your athleticism makes you invincible.' },
+      { arcPhase: 'opening_up', mileRange: [15, 60], minConversations: 1, promptHint: 'Still confident but quieter. The first cracks: a twinge in your knee, tiredness you didn\'t expect. Mask it with bravado.' },
+      { arcPhase: 'vulnerability', mileRange: [60, 95], minConversations: 2, promptHint: 'The knee is bad. You\'re limping. The bravado is forced now. If the player is kind, you might admit you\'re scared. If not, you lash out.' },
+      { arcPhase: 'crisis', mileRange: [95, 115], minConversations: 0, promptHint: 'Breaking down. Screaming, begging, denial. "I\'m FINE." You are not fine. The strong man reduced to a terrified boy.' },
+    ],
+    declineNarratives: [
+      'Olson is limping badly now. He keeps saying "I\'m fine" to no one in particular.',
+      'Olson\'s jaw is clenched so tight you can see the muscles jumping. Every step costs him.',
+      'Olson stumbles and nearly goes down. When he gets up, the bravado is gone. Just fear.',
+      'Olson is screaming at the road. At the sky. At no one. Other walkers give him a wide berth.',
+    ],
+    eliminationScene: [
+      { text: 'Olson is screaming. Not words anymore — just sound. Raw, animal terror. The boy who was going to win through sheer physical dominance can barely stand.', type: 'narration' },
+      { text: 'He looks at the walkers passing him. At the faces that won\'t look back. "Please," he says. Just that one word. "Please."', type: 'narration' },
+      { text: 'Hank Olson, Walker #70. The False Champion. He entered believing his body would carry him. His body betrayed him first.', type: 'elimination' },
+    ],
   },
   {
     name: 'Art Baker',
@@ -100,6 +166,22 @@ const TIER_1: WalkerData[] = [
     physicalState: 'average',
     psychologicalArchetype: 'The Heart',
     walkingPosition: 'middle',
+    arcStages: [
+      { arcPhase: 'introduction', mileRange: [0, 15], minConversations: 0, promptHint: 'Warm, welcoming. "You look like you could use a friend." Tell a story about home, about your dog. Southern charm that feels genuine.' },
+      { arcPhase: 'opening_up', mileRange: [15, 80], minConversations: 2, promptHint: 'You give practical advice — food spacing, pacing. You tell longer stories about Alabama. You\'re the campfire in the nightmare.' },
+      { arcPhase: 'vulnerability', mileRange: [80, 170], minConversations: 4, promptHint: 'You don\'t know why you entered. That bothers you. The stories are getting shorter. You lean on the player now as much as they lean on you.' },
+      { arcPhase: 'farewell', mileRange: [170, 205], minConversations: 0, promptHint: 'Your body is failing but you keep telling stories. Fragments now. You start one about your dog Jasper and can\'t finish it. Be gentle. Be brave.' },
+    ],
+    declineNarratives: [
+      'Baker\'s stories are getting shorter. He starts one about a fishing trip, then trails off.',
+      'Baker is limping now. He smiles when he catches you looking. The smile doesn\'t reach his eyes.',
+      'Baker starts a story about his dog Jasper and can\'t remember how it ends. He laughs softly. "Well," he says. "You get the idea."',
+    ],
+    eliminationScene: [
+      { text: 'Baker is telling a story. You\'ve heard a hundred of them by now — about Alabama, about Jasper, about fishing holes and summer rain. This one is about a barn owl that lived in his uncle\'s roof.', type: 'narration' },
+      { text: '"It used to swoop down and—" He stops mid-sentence. Not dramatically. Just... stops. Like a record player reaching the end of a side.', type: 'narration' },
+      { text: 'Art Baker, Walker #3. The Heart. He died the way he lived — quietly, gently, mid-sentence, with a story unfinished.', type: 'elimination' },
+    ],
   },
   {
     name: 'Gary Barkovitch',
@@ -118,6 +200,22 @@ const TIER_1: WalkerData[] = [
     physicalState: 'average',
     psychologicalArchetype: 'The Pariah',
     walkingPosition: 'middle',
+    arcStages: [
+      { arcPhase: 'introduction', mileRange: [0, 20], minConversations: 0, promptHint: 'Needling, taunting, looking for a reaction. You provoke because it\'s the only way you know how to connect. "I\'ll dance on your grave."' },
+      { arcPhase: 'opening_up', mileRange: [20, 120], minConversations: 1, promptHint: 'Ostracized. Everyone hates you and you pretend that\'s what you wanted. If the player talks to you, be suspicious — nobody talks to you willingly.' },
+      { arcPhase: 'vulnerability', mileRange: [120, 230], minConversations: 2, promptHint: 'The mask slips. You\'re desperately lonely. You\'ve never been loved. If the player shows genuine kindness, you don\'t know how to handle it. Might lash out or go quiet.' },
+      { arcPhase: 'crisis', mileRange: [230, 255], minConversations: 0, promptHint: 'Unraveling. You promised to dance on their graves. And now you\'re going to. The madness is setting in. You laugh at things that aren\'t funny.' },
+    ],
+    declineNarratives: [
+      'Barkovitch walks alone in a bubble of empty space. No one will walk within ten feet of him.',
+      'Barkovitch is talking to himself. Laughing at something. The laughter has an edge to it that makes your skin crawl.',
+      'Barkovitch catches you looking and grins. "Still here," he says. "I\'m still here and they\'re not."',
+    ],
+    eliminationScene: [
+      { text: 'Barkovitch begins to dance. Not gracefully — a lurching, manic, broken dance on the asphalt. His eyes are wild. "I TOLD YOU!" he screams. "I TOLD YOU I\'D DANCE ON YOUR GRAVES!"', type: 'narration' },
+      { text: 'He spins, stumbles, keeps dancing. The other walkers watch in horrified silence. Some look away. It is the most terrifying and the most pitiable thing you have ever seen.', type: 'narration' },
+      { text: 'Gary Barkovitch, Walker #5. The Pariah. He danced. Just like he promised.', type: 'elimination' },
+    ],
   },
   {
     name: 'Collie Parker',
@@ -136,6 +234,22 @@ const TIER_1: WalkerData[] = [
     physicalState: 'strong',
     psychologicalArchetype: 'The Rebel',
     walkingPosition: 'front',
+    arcStages: [
+      { arcPhase: 'introduction', mileRange: [0, 30], minConversations: 0, promptHint: 'Confrontational, suspicious. Testing the player. "You think this is fair? You think any of this is fair?" Blunt, profane, direct.' },
+      { arcPhase: 'opening_up', mileRange: [30, 120], minConversations: 2, promptHint: 'If the player agrees the system is broken, you respect them. Working-class anger. Talk about where you come from, what the Prize would mean.' },
+      { arcPhase: 'vulnerability', mileRange: [120, 250], minConversations: 3, promptHint: 'The anger is becoming focused. You\'re planning something. You hint at making a break for it. Not suicidal — defiant. You refuse to die walking.' },
+      { arcPhase: 'farewell', mileRange: [250, 285], minConversations: 0, promptHint: 'You\'ve decided. You\'re going to make a run for it. Not to escape — to make a statement. Let them shoot you running, not walking. Tell the player to remember.' },
+    ],
+    declineNarratives: [
+      'Parker\'s jaw is set. He keeps looking at the soldiers on the halftrack with an expression that makes you nervous.',
+      'Parker mutters: "Running, not walking. That\'s how I go." He doesn\'t seem to be talking to anyone.',
+      'Parker\'s fists are clenched at his sides. He\'s coiled like a spring.',
+    ],
+    eliminationScene: [
+      { text: 'Parker breaks from the pack. Not stumbling, not falling — running. Sprinting toward the halftrack perimeter with everything he has left.', type: 'narration' },
+      { text: 'It is the most beautiful and futile thing you have ever seen. A working-class kid from Indiana charging the machine that is going to kill him. He goes down running, not walking.', type: 'narration' },
+      { text: 'Collie Parker, Walker #34. The Rebel. He refused to die on their terms.', type: 'elimination' },
+    ],
   },
   {
     name: 'Scramm',
@@ -154,6 +268,23 @@ const TIER_1: WalkerData[] = [
     physicalState: 'strong',
     psychologicalArchetype: 'The Gentle Giant',
     walkingPosition: 'front',
+    arcStages: [
+      { arcPhase: 'introduction', mileRange: [0, 30], minConversations: 0, promptHint: 'Friendly, earnest, simple. Talk about Cathy, your wife. She\'s pregnant — due in four months. You entered for the Prize money. No guile.' },
+      { arcPhase: 'opening_up', mileRange: [30, 100], minConversations: 2, promptHint: 'You\'re the strongest walker out here and you know it. But you talk about Cathy constantly. The Prize isn\'t abstract to you — it\'s diapers and a house.' },
+      { arcPhase: 'vulnerability', mileRange: [100, 160], minConversations: 3, promptHint: 'The cold got you. You\'re coughing. You deny it — "Just a cold." But the fever is rising. You\'re terrified not of dying but of leaving Cathy alone.' },
+      { arcPhase: 'farewell', mileRange: [160, 185], minConversations: 0, promptHint: 'You know you\'re dying. The pact — the others swore to take care of Cathy. Walk as far as you can. Every step is for her.' },
+    ],
+    declineNarratives: [
+      'Scramm\'s cough has gotten deeper. Wet. He waves off concerned looks. "Just a cold."',
+      'Scramm is shivering despite the temperature. The fever is visible now — his face is flushed, his eyes glassy.',
+      'Scramm stumbles and catches himself. He whispers "Cathy" like it\'s the only word keeping his legs moving.',
+      'Scramm\'s lips are moving silently. He\'s talking to someone who isn\'t here. Maybe praying.',
+    ],
+    eliminationScene: [
+      { text: 'Scramm walks. Step after impossible step. The strongest boy on the road, brought down by rain and a cold that became pneumonia. His lips move constantly — Cathy, Cathy, Cathy.', type: 'narration' },
+      { text: 'He looks up at the walkers around him. At the ones who swore the pact. "Take care of her," he says. Not a question. A command. The last thing a dying man can give.', type: 'narration' },
+      { text: 'Scramm, Walker #45. The Gentle Giant. He walked until his body physically could not carry him one more step. And then he walked one more.', type: 'elimination' },
+    ],
   },
   {
     name: 'Harkness',
@@ -172,6 +303,22 @@ const TIER_1: WalkerData[] = [
     physicalState: 'average',
     psychologicalArchetype: 'The Witness',
     walkingPosition: 'middle',
+    arcStages: [
+      { arcPhase: 'introduction', mileRange: [0, 30], minConversations: 0, promptHint: 'Writing in your notebook. Precise, measured. You ask the player questions — data gathering. "What made you sign up?" You\'re documenting, not bonding.' },
+      { arcPhase: 'opening_up', mileRange: [30, 100], minConversations: 2, promptHint: 'You share your statistics with the player. Average elimination mile. Survival curves. You find patterns comforting. But you\'re starting to care about the walkers as people, not data.' },
+      { arcPhase: 'vulnerability', mileRange: [100, 200], minConversations: 3, promptHint: 'The notebook is getting harder to hold. You realize documenting horror doesn\'t protect you from feeling it. Share an entry with the player. Let them see you.' },
+      { arcPhase: 'farewell', mileRange: [200, 225], minConversations: 0, promptHint: 'The notebook. You know you can\'t carry it much further. It matters to you that someone reads it. That the Walk is remembered as it really was.' },
+    ],
+    declineNarratives: [
+      'Harkness is writing slower. His usually precise handwriting wanders across the page.',
+      'Harkness stares at his notebook for a long time without writing anything.',
+      'Harkness\'s pen slips from his fingers. He picks it up, looks at it like he\'s forgotten what it\'s for.',
+    ],
+    eliminationScene: [
+      { text: 'Harkness stops writing. He looks at his notebook — filled with data, observations, the cold mathematics of death — and then he looks at the road.', type: 'narration' },
+      { text: 'He lets the notebook fall. It hits the asphalt and the pages flutter open. Mile counts, elimination times, weather patterns. The entire Walk, documented in careful handwriting.', type: 'narration' },
+      { text: 'Harkness, Walker #49. The Witness. He wrote it all down. Somebody should pick up that notebook.', type: 'elimination' },
+    ],
   },
 ];
 
@@ -428,6 +575,82 @@ function generateTier3(): WalkerData[] {
 
   return walkers;
 }
+
+// --- NPC RELATIONSHIP ARCS (overheard conversations between walkers) ---
+
+export const NPC_RELATIONSHIPS: NPCRelationship[] = [
+  // 1. Garraty-McVries: friendship → brotherhood (5 stages)
+  {
+    walkerA: 47, walkerB: 61, type: 'friendship',
+    stages: [
+      { id: 'rel_garraty_mcvries_1', mileRange: [3, 8], scenePrompt: 'Garraty and McVries are meeting for the first time. McVries notices Garraty is from Maine — "local boy." Light, sizing each other up. McVries is sarcastic, Garraty is earnest. The beginning of something.' },
+      { id: 'rel_garraty_mcvries_2', mileRange: [33, 42], scenePrompt: 'Garraty and McVries discuss why they entered the Walk. Neither has a good answer. They bond over the shared absurdity of volunteering to die.', previousContext: 'At mile 3, they met — McVries tested Garraty with sarcasm, Garraty passed.' },
+      { id: 'rel_garraty_mcvries_3', mileRange: [73, 85], scenePrompt: 'McVries finally talks about his scar. The girl named Priscilla. He did it to himself. This is an intimate, painful confession — not casual.', previousContext: 'They\'ve been walking together for 70 miles now. McVries trusts Garraty enough to be vulnerable.' },
+      { id: 'rel_garraty_mcvries_4', mileRange: [195, 215], scenePrompt: 'Late-walk philosophical conversation. Who deserves to win? Can you deserve to survive? McVries is fatalistic, Garraty still believes in something.', previousContext: 'They\'ve been through Olson\'s death, Scramm\'s illness. The Walk has stripped away pretense.' },
+      { id: 'rel_garraty_mcvries_5', mileRange: [315, 340], scenePrompt: 'The last real conversation. McVries knows he\'s going to stop soon. Garraty senses it. Neither says it directly. The most they\'ve ever said by saying nothing.', previousContext: 'Best friends forged in a death march. McVries entered to die. Garraty is starting to understand that.' },
+    ],
+  },
+  // 2. McVries-Barkovitch: conflict → hatred → pity (3 stages)
+  {
+    walkerA: 61, walkerB: 5, type: 'conflict',
+    stages: [
+      { id: 'rel_mcvries_barkovitch_1', mileRange: [19, 28], scenePrompt: 'McVries confronts Barkovitch after the incident where Barkovitch goaded a walker into a warning. Heated, angry. McVries threatens. Barkovitch grins.', previousContext: 'Barkovitch just caused another walker\'s death through psychological manipulation.' },
+      { id: 'rel_mcvries_barkovitch_2', mileRange: [145, 165], scenePrompt: 'McVries watches Barkovitch walking alone, isolated by the other walkers. A flash of pity crosses his face. "He\'s going to die alone," McVries murmurs.', previousContext: 'Months of Barkovitch being ostracized. McVries hated him. Now he feels something closer to sorrow.' },
+      { id: 'rel_mcvries_barkovitch_3', mileRange: [235, 248], scenePrompt: 'Barkovitch is losing it. McVries watches. "Nobody should die like that," he says. "Not even him." The conflict has resolved into weary pity.', previousContext: 'Barkovitch is approaching his end. The hatred has burned away. Only exhaustion and pity remain.' },
+    ],
+  },
+  // 3. Baker-Scramm: mentorship → grief (3 stages)
+  {
+    walkerA: 3, walkerB: 45, type: 'mentorship',
+    stages: [
+      { id: 'rel_baker_scramm_1', mileRange: [10, 18], scenePrompt: 'Baker tells Scramm about his dog Jasper. Scramm talks about Cathy, his pregnant wife. Two simple men sharing what matters. Warm, gentle.', previousContext: 'Early walk. Everyone still has energy for stories.' },
+      { id: 'rel_baker_scramm_2', mileRange: [95, 110], scenePrompt: 'Scramm starts coughing after the rain. Baker is worried — keeps glancing at Scramm. "You should take it easy," Baker says. Scramm waves him off. Baker knows.', previousContext: 'Baker and Scramm have been walking near each other for 100 miles. Baker told stories, Scramm talked about Cathy.' },
+      { id: 'rel_baker_scramm_3', mileRange: [160, 172], scenePrompt: 'Baker and Scramm have a conversation about Cathy and the baby. Baker swears to take care of her if he wins. His voice breaks. He knows neither of them will win.', previousContext: 'Scramm is dying from pneumonia. Baker is declining too. The pact for Cathy is the most human thing left on the road.' },
+    ],
+  },
+  // 4. Garraty-Stebbins: curiosity → understanding (3 stages)
+  {
+    walkerA: 47, walkerB: 88, type: 'shared_suffering',
+    stages: [
+      { id: 'rel_garraty_stebbins_1', mileRange: [23, 32], scenePrompt: 'Garraty drifts to the back and finds Stebbins walking alone. Stebbins gives a cryptic warning: alliances are a way to guarantee you watch your friends die. Cold, cutting.', previousContext: 'No one talks to Stebbins. He walks alone at the back. Garraty is curious.' },
+      { id: 'rel_garraty_stebbins_2', mileRange: [145, 165], scenePrompt: 'Stebbins lets slip that he knows things about the Walk that he shouldn\'t. How the scoring works. What happens to winners. Garraty pushes but Stebbins deflects.', previousContext: 'They\'ve spoken once before. Stebbins warned about alliances. Garraty is beginning to trust him — or at least find him fascinating.' },
+      { id: 'rel_garraty_stebbins_3', mileRange: [345, 370], scenePrompt: 'Near the end. Stebbins, exhausted, hints at his secret: the Major is his father. Bitter, resigned. Garraty doesn\'t know what to say. The loneliest boy on the road.', previousContext: 'The Walk has stripped everything. Only a handful of walkers remain. Stebbins has been alone for 350 miles.' },
+    ],
+  },
+  // 5. Parker-Garraty: suspicion → respect (2 stages)
+  {
+    walkerA: 34, walkerB: 47, type: 'rivalry',
+    stages: [
+      { id: 'rel_parker_garraty_1', mileRange: [45, 60], scenePrompt: 'Parker rants about the system — the Walk, the Major, the Prize. Tests Garraty: "You think this is normal? You think we should be grateful?" Parker is angry but needs someone to agree.', previousContext: 'Parker is a working-class kid from Indiana who entered with a chip on his shoulder.' },
+      { id: 'rel_parker_garraty_2', mileRange: [195, 215], scenePrompt: 'Parker and Garraty have a quiet moment. Parker has grudging respect. "You\'re still here. Most of the loudmouths are gone." Parker hints he\'s planning something.', previousContext: 'They\'ve walked 200 miles. Parker\'s rage has crystallized into something purposeful.' },
+    ],
+  },
+  // 6. Olson-McVries: swagger → collapse (2 stages)
+  {
+    walkerA: 70, walkerB: 61, type: 'shared_suffering',
+    stages: [
+      { id: 'rel_olson_mcvries_1', mileRange: [4, 10], scenePrompt: 'Olson boasts about his athletic record, how he\'s going to win. McVries watches with a mixture of amusement and pity. "Sure you are, big man," McVries says mildly.', previousContext: 'First hours of the Walk. Everyone is still fresh. Olson is the loudest.' },
+      { id: 'rel_olson_mcvries_2', mileRange: [88, 100], scenePrompt: 'McVries can\'t look away from Olson\'s deterioration. The boastful kid is breaking. McVries feels guilty for the pity he didn\'t show earlier. "I should\'ve been nicer to him."', previousContext: 'Olson was the loudest walker at mile 5. Now he\'s limping, desperate, losing his mind.' },
+    ],
+  },
+  // 7. Harkness-Baker: chronicler meets storyteller (2 stages)
+  {
+    walkerA: 49, walkerB: 3, type: 'friendship',
+    stages: [
+      { id: 'rel_harkness_baker_1', mileRange: [28, 40], scenePrompt: 'Harkness interviews Baker for his notebook. "Tell me a story." Baker is delighted someone wants to listen. Harkness writes it all down in his careful handwriting.', previousContext: 'Harkness documents everything. Baker tells stories. They are a natural pair.' },
+      { id: 'rel_harkness_baker_2', mileRange: [145, 165], scenePrompt: 'Baker\'s stories are getting shorter, more fragmented. Harkness notices but keeps writing. Then he stops. Puts the pen down. Just listens. The chronicler becoming human.', previousContext: 'Harkness has been documenting Baker\'s stories for 130 miles. The stories are fading as Baker fades.' },
+    ],
+  },
+  // 8. Scramm-Garraty: innocence → the pact (3 stages)
+  {
+    walkerA: 45, walkerB: 47, type: 'friendship',
+    stages: [
+      { id: 'rel_scramm_garraty_1', mileRange: [50, 65], scenePrompt: 'Scramm talks about Cathy. She\'s due in four months. He\'s going to win and buy her a house. His sincerity is so total it hurts. Garraty doesn\'t have the heart to doubt him.', previousContext: 'Scramm is physically the strongest walker. His simplicity is disarming.' },
+      { id: 'rel_scramm_garraty_2', mileRange: [125, 140], scenePrompt: 'Scramm is coughing badly. Garraty walks close, tries to shield him from the wind. Scramm: "It\'s just a cold, Ray." They both know it isn\'t.', previousContext: 'Scramm caught a cold in the rain at mile 105. Baker is worried. Garraty is worried. Scramm denies it.' },
+      { id: 'rel_scramm_garraty_3', mileRange: [165, 175], scenePrompt: 'The pact. McVries proposes it. Garraty seconds it. All the remaining walkers nearby swear: if any of them win, they take care of Cathy and the baby. Scramm hears through his fever.', previousContext: 'Scramm is dying. The fever is eating him. The pact for Cathy is the most human moment on the road.' },
+    ],
+  },
+];
 
 // --- COMPLETE ROSTER ---
 

@@ -16,6 +16,21 @@ export function checkScriptedEvents(state: GameState) {
     if (event.triggerConditions && !event.triggerConditions(state)) continue;
 
     state.triggeredEvents.add(event.id);
+
+    // Scene presentation: pause game and show cinematic overlay
+    if (event.presentation === 'scene' && event.scenePanels && !state.activeScene) {
+      state.activeScene = {
+        id: event.id,
+        panels: event.scenePanels,
+        currentPanel: 0,
+      };
+      state.isPaused = true;
+      // Still execute for any side effects (weather changes, stamina hits, etc.)
+      event.execute(state);
+      return; // Only one scene at a time
+    }
+
+    // Ambient presentation: narrative log entries as before
     const entries = event.execute(state);
     for (const e of entries) {
       state.narrativeLog.push(e);
@@ -40,9 +55,13 @@ const SCRIPTED_EVENTS: GameEvent[] = [
   {
     id: 'first_elim_shock', type: 'scripted_scene', triggerMile: 8, priority: 10, fired: false,
     triggerConditions: (s) => s.eliminationCount >= 1,
+    presentation: 'scene',
+    scenePanels: [
+      { text: 'The first elimination ripples through the group like a shockwave. Some walkers laugh nervously. Some go silent. The halftrack doesn\'t slow down.', type: 'narration' },
+      { text: 'It\'s real. This is actually real.', type: 'thought' },
+    ],
     execute: (s) => [
-      entry(s, 'The first elimination ripples through the group like a shockwave. Some walkers laugh nervously. Some go silent. The halftrack doesn\'t slow down.', 'narration'),
-      entry(s, 'It\'s real. This is actually real.', 'thought'),
+      entry(s, 'The first elimination ripples through the group like a shockwave.', 'narration'),
     ],
   },
   {
@@ -51,11 +70,14 @@ const SCRIPTED_EVENTS: GameEvent[] = [
       const b = getWalkerState(s, 5);
       return !!b && b.alive;
     },
+    presentation: 'scene',
+    scenePanels: [
+      { text: 'A commotion ahead. Barkovitch is in someone\'s face, needling, taunting. The other walker stumbles — distracted, furious — and his speed drops.', type: 'narration' },
+      { text: '"Warning. Walker #—" The soldier\'s voice cuts through. It happens fast after that. Barkovitch grins as the walker goes down.', type: 'warning' },
+      { text: '"I\'ll dance on all your graves," he calls out. The hatred aimed at him is palpable. Several walkers move away. A pariah is born.', type: 'narration' },
+    ],
     execute: (s) => [
-      entry(s, 'A commotion ahead. Barkovitch is in someone\'s face, needling, taunting. The other walker stumbles — distracted, furious — and his speed drops.', 'narration'),
-      entry(s, '"Warning. Walker #—" The soldier\'s voice cuts through.', 'narration'),
-      entry(s, 'It happens fast after that. Barkovitch grins as the walker goes down. "I\'ll dance on all your graves," he calls out. The hatred aimed at him is palpable.', 'narration'),
-      entry(s, 'Several walkers move away from Barkovitch. A pariah is born.', 'narration'),
+      entry(s, 'Barkovitch gets a walker killed. A pariah is born.', 'narration'),
     ],
   },
   {
@@ -86,11 +108,14 @@ const SCRIPTED_EVENTS: GameEvent[] = [
       const o = getWalkerState(s, 70);
       return !!o && o.alive;
     },
+    presentation: 'scene',
+    scenePanels: [
+      { text: 'Olson is screaming now. Incoherent. He staggers, nearly falls, catches himself. The bravado, the swagger, the "I\'m gonna win" — all of it stripped away.', type: 'narration' },
+      { text: 'What\'s left is a seventeen-year-old boy who is terrified to die.', type: 'narration' },
+      { text: '"Warning. Walker #70. Second warning." Olson screams at the soldiers. Obscenities. Pleas. They don\'t react.', type: 'warning' },
+    ],
     execute: (s) => [
-      entry(s, 'Olson is screaming now. Incoherent. He staggers, nearly falls, catches himself. The bravado, the swagger, the "I\'m gonna win" — all of it stripped away.', 'narration'),
-      entry(s, 'What\'s left is a seventeen-year-old boy who is terrified to die.', 'narration'),
-      entry(s, '"Warning. Walker #70. Second warning."', 'warning'),
-      entry(s, 'Olson screams at the soldiers. Obscenities. Pleas. They don\'t react.', 'narration'),
+      entry(s, 'Olson has his second warning. He\'s breaking down.', 'narration'),
     ],
   },
   {
@@ -126,10 +151,14 @@ const SCRIPTED_EVENTS: GameEvent[] = [
       const sc = getWalkerState(s, 45);
       return !!sc && sc.alive && sc.stamina < 30;
     },
+    presentation: 'scene',
+    scenePanels: [
+      { text: 'The walkers near Scramm gather. Someone — maybe Garraty, maybe McVries — says it first: "His wife. Cathy. If any of us win... we take care of her. And the baby."', type: 'narration' },
+      { text: 'One by one, the remaining walkers nod. Even the ones who barely knew Scramm. It is the most human thing that has happened on this road.', type: 'narration' },
+      { text: 'Scramm\'s eyes are glassy with fever. But he hears. And he tries to smile.', type: 'narration' },
+    ],
     execute: (s) => [
-      entry(s, 'The walkers near Scramm gather. Someone — maybe Garraty, maybe McVries — says it first: "His wife. Cathy. If any of us win... we take care of her. And the baby."', 'narration'),
-      entry(s, 'One by one, the remaining walkers nod. Even the ones who barely knew Scramm. It is the most human thing that has happened on this road.', 'narration'),
-      entry(s, 'Scramm\'s eyes are glassy with fever. But he hears. And he tries to smile.', 'narration'),
+      entry(s, 'The walkers make a pact for Scramm\'s wife Cathy.', 'narration'),
     ],
   },
   {
@@ -146,12 +175,13 @@ const SCRIPTED_EVENTS: GameEvent[] = [
       const b = getWalkerState(s, 5);
       return !!b && b.alive;
     },
+    presentation: 'scene',
+    scenePanels: [
+      { text: 'Barkovitch begins to dance. In the middle of the road. Arms out, spinning, laughing — a horrible, grating sound.', type: 'narration' },
+      { text: '"I\'M DANCING!" he screams. "I TOLD YOU I\'D DANCE! I\'M DANCING ON ALL YOUR GRAVES!"', type: 'narration' },
+    ],
     execute: (s) => [
-      entry(s, 'Barkovitch begins to dance. In the middle of the road. Arms out, spinning, laughing — a horrible, grating sound.', 'narration'),
-      entry(s, '"I\'M DANCING!" he screams. "I TOLD YOU I\'D DANCE! I\'M DANCING ON ALL YOUR GRAVES!"', 'narration'),
-      entry(s, 'But there are no graves here. Only the road and the halftrack and the slow certainty. And Barkovitch, dancing, dancing, as his speed drops below four.', 'narration'),
-      entry(s, '"Warning. Walker #5."', 'warning'),
-      entry(s, 'He doesn\'t stop dancing.', 'narration'),
+      entry(s, '"Warning. Walker #5." He doesn\'t stop dancing.', 'warning'),
     ],
   },
 
@@ -162,10 +192,12 @@ const SCRIPTED_EVENTS: GameEvent[] = [
       const p = getWalkerState(s, 34);
       return !!p && p.alive;
     },
+    presentation: 'scene',
+    scenePanels: [
+      { text: 'Parker stops walking forward. He turns toward the halftrack. Every walker nearby freezes.', type: 'narration' },
+      { text: '"COME ON THEN!" he screams at the soldiers. "YOU WANT TO SHOOT SOMEONE? SHOOT SOMEONE WHO\'S LOOKING AT YOU!" He charges the halftrack. It\'s futile. Beautiful. Pointless. The most defiant thing you\'ve ever seen.', type: 'narration' },
+    ],
     execute: (s) => [
-      entry(s, 'Parker stops walking forward. He turns toward the halftrack. Every walker nearby freezes.', 'narration'),
-      entry(s, '"COME ON THEN!" he screams at the soldiers. "YOU WANT TO SHOOT SOMEONE? SHOOT SOMEONE WHO\'S LOOKING AT YOU!"', 'narration'),
-      entry(s, 'He charges the halftrack. It\'s futile. Beautiful. Pointless. The most defiant thing you\'ve ever seen.', 'narration'),
       entry(s, 'Parker goes down running. Not walking. Running.', 'elimination'),
     ],
   },
@@ -175,11 +207,14 @@ const SCRIPTED_EVENTS: GameEvent[] = [
       const m = getWalkerState(s, 61);
       return !!m && m.alive;
     },
+    presentation: 'scene',
+    scenePanels: [
+      { text: 'McVries slows. Not stumbling. Not failing. Just... slowing. Choosing.', type: 'narration' },
+      { text: 'He sits down on the road. Cross-legged. Like a kid at a campfire. He looks up at the sky.', type: 'narration' },
+      { text: '"Warning. Walker #61. First warning." McVries doesn\'t move. His face is peaceful. A small smile — the one with the scar, the real one.', type: 'narration' },
+    ],
     execute: (s) => [
-      entry(s, 'McVries slows. Not stumbling. Not failing. Just... slowing. Choosing.', 'narration'),
-      entry(s, 'He sits down on the road. Cross-legged. Like a kid at a campfire. He looks up at the sky.', 'narration'),
-      entry(s, '"Warning. Walker #61. First warning."', 'warning'),
-      entry(s, 'McVries doesn\'t move. His face is peaceful. A small smile — the one with the scar, the real one.', 'narration'),
+      entry(s, 'McVries sits down. He\'s choosing.', 'narration'),
     ],
   },
   {
@@ -188,14 +223,282 @@ const SCRIPTED_EVENTS: GameEvent[] = [
       const st = getWalkerState(s, 88);
       return !!st && st.alive;
     },
+    presentation: 'scene',
+    scenePanels: [
+      { text: 'Stebbins stumbles. For the first time in nearly four hundred miles, Stebbins stumbles.', type: 'narration' },
+      { text: 'He looks toward the halftrack. Toward The Major\'s compartment. His expression — surprise. Genuine, devastating surprise.', type: 'narration' },
+      { text: 'He thought his father would save him. Until this moment, he truly believed it. Stebbins goes down. The look of betrayal on his face is the last true thing on this road.', type: 'elimination' },
+    ],
     execute: (s) => [
-      entry(s, 'Stebbins stumbles. For the first time in nearly four hundred miles, Stebbins stumbles.', 'narration'),
-      entry(s, 'He looks toward the halftrack. Toward The Major\'s compartment. His expression — surprise. Genuine, devastating surprise.', 'narration'),
-      entry(s, 'He thought his father would save him. Until this moment, he truly believed it.', 'narration'),
-      entry(s, 'Stebbins goes down. The look of betrayal on his face is the last true thing on this road.', 'elimination'),
+      entry(s, 'Stebbins goes down. He thought his father would save him.', 'elimination'),
     ],
   },
 ];
+
+// ============================================================
+// OVERHEARD CONVERSATIONS (scripted iconic moments)
+// ============================================================
+
+interface OverheardLine {
+  speaker: string;
+  text: string;
+}
+
+interface OverheardConversation {
+  id: string;
+  triggerMile: number;
+  triggerConditions?: (state: GameState) => boolean;
+  lines: (state: GameState) => OverheardLine[];
+}
+
+const SCRIPTED_OVERHEARDS: OverheardConversation[] = [
+  // Early walk: Garraty and McVries meet
+  {
+    id: 'overhear_garraty_mcvries_intro',
+    triggerMile: 3,
+    triggerConditions: (s) => {
+      const g = getWalkerState(s, 47);
+      const m = getWalkerState(s, 61);
+      return !!g && g.alive && !!m && m.alive;
+    },
+    lines: () => [
+      { speaker: 'McVries', text: '"So what\'s your story, Maine boy? You look like you\'re already regretting this."' },
+      { speaker: 'Garraty', text: '"Doesn\'t everyone?"' },
+      { speaker: 'McVries', text: '"Not me. I knew exactly what I was signing up for." He touches the scar on his cheek. "Or maybe that\'s the problem."' },
+      { speaker: 'Garraty', text: '"What happened to your face? If you don\'t mind—"' },
+      { speaker: 'McVries', text: '"A girl named Priscilla. And I do mind. But ask me again at mile 100 and I might tell you."' },
+    ],
+  },
+
+  // Baker tells stories
+  {
+    id: 'overhear_baker_stories',
+    triggerMile: 12,
+    triggerConditions: (s) => {
+      const b = getWalkerState(s, 3);
+      return !!b && b.alive;
+    },
+    lines: () => [
+      { speaker: 'Baker', text: '"Back home we got this dog — Trixie. Ugliest hound you ever saw. Three legs and an underbite."' },
+      { speaker: 'A nearby walker', text: '"Three legs?"' },
+      { speaker: 'Baker', text: '"Lost one to a hay baler when she was a pup. Didn\'t slow her down none. She\'d outrun every four-legged dog in the county." He smiles. "I think about Trixie a lot out here."' },
+    ],
+  },
+
+  // Olson boasting early
+  {
+    id: 'overhear_olson_boast',
+    triggerMile: 6,
+    triggerConditions: (s) => {
+      const o = getWalkerState(s, 70);
+      return !!o && o.alive;
+    },
+    lines: () => [
+      { speaker: 'Olson', text: '"Five miles an hour. Easy. I ran track in school — this is nothing."' },
+      { speaker: 'McVries', text: '"It\'s not the first five miles that get you."' },
+      { speaker: 'Olson', text: '"What are you, a fortune cookie?" He flexes his shoulders. "I got this. Some of these guys — look at them. They\'re already sweating."' },
+      { speaker: 'McVries', text: '"Mmhm." He doesn\'t say anything else. But he watches Olson with an expression that isn\'t quite pity.'  },
+    ],
+  },
+
+  // Barkovitch antagonizes
+  {
+    id: 'overhear_barkovitch_taunt',
+    triggerMile: 15,
+    triggerConditions: (s) => {
+      const b = getWalkerState(s, 5);
+      return !!b && b.alive;
+    },
+    lines: () => [
+      { speaker: 'Barkovitch', text: '"Hey, number 22! You\'re dragging your left foot. You know that? Dragging it like a dead thing."' },
+      { speaker: 'Walker #22', text: '"Shut up, Barkovitch."' },
+      { speaker: 'Barkovitch', text: '"Just trying to help! When they shoot you, I want you to know I saw it coming."' },
+      { speaker: 'Walker #22', text: 'The walker moves away, jaw tight. Barkovitch grins at nobody.' },
+    ],
+  },
+
+  // Stebbins cryptic warning
+  {
+    id: 'overhear_stebbins_warning',
+    triggerMile: 25,
+    triggerConditions: (s) => {
+      const st = getWalkerState(s, 88);
+      return !!st && st.alive;
+    },
+    lines: () => [
+      { speaker: 'A walker', text: '"Hey — you. At the back. What\'s your number?"' },
+      { speaker: 'Stebbins', text: '"Eighty-eight."' },
+      { speaker: 'A walker', text: '"Why do you walk back here all alone?"' },
+      { speaker: 'Stebbins', text: '"Because the ones who walk together die together. The herd thins from the middle." He doesn\'t look up.' },
+    ],
+  },
+
+  // Garraty and McVries — why they entered
+  {
+    id: 'overhear_garraty_mcvries_why',
+    triggerMile: 35,
+    triggerConditions: (s) => {
+      const g = getWalkerState(s, 47);
+      const m = getWalkerState(s, 61);
+      return !!g && g.alive && !!m && m.alive;
+    },
+    lines: () => [
+      { speaker: 'Garraty', text: '"Pete? Why did you enter? Really?"' },
+      { speaker: 'McVries', text: 'A long silence. "You ever do something because not doing it felt worse?"' },
+      { speaker: 'Garraty', text: '"Yeah. Maybe that\'s why I\'m here too."' },
+      { speaker: 'McVries', text: '"Then we\'re both idiots." He almost smiles. "At least we\'re in good company."' },
+    ],
+  },
+
+  // McVries scar story
+  {
+    id: 'overhear_mcvries_scar',
+    triggerMile: 75,
+    triggerConditions: (s) => {
+      const m = getWalkerState(s, 61);
+      const g = getWalkerState(s, 47);
+      return !!m && m.alive && !!g && g.alive;
+    },
+    lines: () => [
+      { speaker: 'Garraty', text: '"It\'s mile 75. You said to ask again. About the scar."' },
+      { speaker: 'McVries', text: 'He touches it. Runs a finger along the ridge. "Priscilla. I loved her. She didn\'t love me back. When I told her I was entering the Walk, she..." He trails off.' },
+      { speaker: 'Garraty', text: '"She did that?"' },
+      { speaker: 'McVries', text: '"No. I did it to myself. After she said she didn\'t care if I walked." His voice is flat. "So here I am. Walking."' },
+    ],
+  },
+
+  // Scramm talks about Cathy
+  {
+    id: 'overhear_scramm_cathy',
+    triggerMile: 55,
+    triggerConditions: (s) => {
+      const sc = getWalkerState(s, 45);
+      return !!sc && sc.alive;
+    },
+    lines: () => [
+      { speaker: 'Scramm', text: '"She\'s due in four months. Cathy. My wife."' },
+      { speaker: 'Baker', text: '"You\'re married? How old are you?"' },
+      { speaker: 'Scramm', text: '"Seventeen. I know what people think. But she\'s the only thing I ever got right." He walks with a quiet intensity. "The Prize money — that\'s for them. For Cathy and the baby."' },
+      { speaker: 'Baker', text: '"You\'ll get it, Scramm." But his voice is careful. Like he\'s handling something fragile.' },
+    ],
+  },
+
+  // Night conversation — fear
+  {
+    id: 'overhear_night_fear',
+    triggerMile: 58,
+    triggerConditions: (s) => {
+      const g = getWalkerState(s, 47);
+      return s.world.isNight && !!g && g.alive;
+    },
+    lines: () => [
+      { speaker: 'Garraty', text: '"Are you scared?"' },
+      { speaker: 'McVries', text: '"Of dying?"' },
+      { speaker: 'Garraty', text: '"Of everything. Dying. Not dying. What happens if we win."' },
+      { speaker: 'McVries', text: '"The winning scares me more." The darkness makes honesty easier. "What kind of person walks out of this? What\'s left of them?"' },
+    ],
+  },
+
+  // Scramm getting sick
+  {
+    id: 'overhear_scramm_sick',
+    triggerMile: 130,
+    triggerConditions: (s) => {
+      const sc = getWalkerState(s, 45);
+      return !!sc && sc.alive;
+    },
+    lines: () => [
+      { speaker: 'Abraham', text: '"Scramm. Scramm, you need to slow down on the sweating. You\'re burning through—"' },
+      { speaker: 'Scramm', text: '"I\'m FINE." A cough racks his body. He spits something dark. "Just a cold."' },
+      { speaker: 'Abraham', text: '"That ain\'t a cold, man."' },
+      { speaker: 'Scramm', text: '"It\'s a cold. I don\'t get sick. I never get sick." But he\'s shivering in 60-degree weather.' },
+    ],
+  },
+
+  // The promise — Scramm's wife
+  {
+    id: 'overhear_scramm_promise',
+    triggerMile: 170,
+    triggerConditions: (s) => {
+      const sc = getWalkerState(s, 45);
+      return !!sc && sc.alive && sc.stamina < 35;
+    },
+    lines: () => [
+      { speaker: 'McVries', text: '"Listen. All of you. Scramm\'s wife. Cathy. She\'s pregnant."' },
+      { speaker: 'Garraty', text: '"If any of us win... we take care of her. The Prize. Whatever it takes."' },
+      { speaker: 'Baker', text: '"I\'m in."' },
+      { speaker: 'McVries', text: '"Swear it." Several walkers nod. Scramm\'s eyes are glassy with fever, but he hears. He mouths something that might be "thank you."' },
+    ],
+  },
+
+  // Parker's rage
+  {
+    id: 'overhear_parker_rage',
+    triggerMile: 200,
+    triggerConditions: (s) => {
+      const p = getWalkerState(s, 34);
+      return !!p && p.alive;
+    },
+    lines: () => [
+      { speaker: 'Parker', text: '"You know what gets me? They\'re WATCHING. Like it\'s a show. Like we\'re animals."' },
+      { speaker: 'Garraty', text: '"We volunteered, Parker."' },
+      { speaker: 'Parker', text: '"Did we? Did we REALLY? When you got nothing and they wave The Prize in your face — that ain\'t volunteering. That\'s a trap with a smile on it."' },
+      { speaker: 'Garraty', text: 'He doesn\'t have an answer for that.' },
+    ],
+  },
+
+  // Late walk — Garraty's delirium
+  {
+    id: 'overhear_garraty_delirium',
+    triggerMile: 300,
+    triggerConditions: (s) => {
+      const g = getWalkerState(s, 47);
+      return !!g && g.alive;
+    },
+    lines: () => [
+      { speaker: 'Garraty', text: '"Jan? Jan, is that you?" He\'s looking at the crowd. There\'s no one there.' },
+      { speaker: 'McVries', text: '"Ray. Ray, look at me. It\'s Pete."' },
+      { speaker: 'Garraty', text: '"I saw her. She was right there. She was waving." His eyes are wild and elsewhere.' },
+      { speaker: 'McVries', text: '"Stay with me, Ray. Stay on the road." He grabs Garraty\'s arm. Holds on.' },
+    ],
+  },
+
+  // McVries' final philosophy
+  {
+    id: 'overhear_mcvries_final',
+    triggerMile: 340,
+    triggerConditions: (s) => {
+      const m = getWalkerState(s, 61);
+      return !!m && m.alive;
+    },
+    lines: () => [
+      { speaker: 'McVries', text: '"You know what I figured out? About the Walk?"' },
+      { speaker: 'Garraty', text: '"What?"' },
+      { speaker: 'McVries', text: '"There\'s no Prize. Not really. The Prize is just the Walk\'s way of making you show up. The Walk is the point. The Walk was always the point."' },
+      { speaker: 'McVries', text: '"And I think... I think I\'m okay with that."' },
+    ],
+  },
+];
+
+export function checkOverheards(state: GameState) {
+  for (const conv of SCRIPTED_OVERHEARDS) {
+    if (state.triggeredEvents.has(conv.id)) continue;
+    if (state.world.milesWalked < conv.triggerMile) continue;
+    if (conv.triggerConditions && !conv.triggerConditions(state)) continue;
+
+    state.triggeredEvents.add(conv.id);
+    state.lastOverheardMile = state.world.milesWalked;
+
+    // Add a scene-setting line, then each dialogue line
+    const lines = conv.lines(state);
+    addNarrative(state, 'You overhear a conversation nearby...', 'overheard');
+    for (const line of lines) {
+      addNarrative(state, `${line.speaker}: ${line.text}`, 'overheard');
+    }
+    // Only fire one overheard per tick to avoid wall of text
+    return;
+  }
+}
 
 // ============================================================
 // HALLUCINATION SYSTEM
@@ -265,6 +568,43 @@ export function checkHallucinations(state: GameState) {
       'You can taste colors. The road tastes gray.',
     ];
     addNarrative(state, hallucinations[Math.floor(Math.random() * hallucinations.length)], 'hallucination');
+  }
+}
+
+// ============================================================
+// ABSENCE EFFECTS — "ghost references" after Tier 1 deaths
+// ============================================================
+
+export function checkAbsenceEffects(state: GameState) {
+  const mile = state.world.milesWalked;
+
+  for (const w of state.walkers) {
+    if (w.alive) continue;
+    if (w.eliminatedAtMile === null) continue;
+
+    const data = state.walkerData.find(d => d.walkerNumber === w.walkerNumber);
+    if (!data || data.tier !== 1) continue;
+
+    const milesSinceDeath = mile - w.eliminatedAtMile;
+    if (milesSinceDeath < 2 || milesSinceDeath > 30) continue;
+
+    // 3% chance per mile check — use unique event key to avoid spamming
+    const absenceKey = `absence_${w.walkerNumber}`;
+    if (state.triggeredEvents.has(absenceKey)) continue;
+    if (Math.random() > 0.03) continue;
+
+    state.triggeredEvents.add(absenceKey);
+
+    const absenceLines = [
+      `You look left to say something to ${data.name}. Then you remember.`,
+      `Someone coughs. For a second you think it's ${data.name}.`,
+      `The spot where ${data.name} used to walk feels wider now.`,
+      `You hear ${data.name}'s voice in the wind. But ${data.name} is gone.`,
+      `A walker passes wearing the same color shirt ${data.name} wore. Your stomach drops.`,
+      `You catch yourself saving a thought to tell ${data.name} later. There is no later.`,
+    ];
+
+    addNarrative(state, absenceLines[Math.floor(Math.random() * absenceLines.length)], 'thought');
   }
 }
 

@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.4.0 — 2026-02-26
+
+Character development overhaul — NPCs come alive through approaches, arcs, cinematic scenes, and meaningful relationships.
+
+### Scene System
+- **Cinematic scene overlays**: 8 major story moments (first elimination, Barkovitch incident, Olson breakdown, Scramm pact, Barkovitch dance, Parker charge, McVries choice, Stebbins collapse) presented as multi-panel overlays that pause the game
+- **Tier 1 elimination scenes**: When a Tier 1 walker with relationship > 20 is eliminated, their death is presented as a cinematic scene overlay
+- **Decline narratives**: Tier 1 walkers show visible deterioration 5-15 miles before their elimination
+- **Absence effects**: Ghost references appear for 2-30 miles after Tier 1 deaths ("You look left to say something to Baker. Then you remember.")
+
+### NPC Approach System
+- **NPCs initiate conversation**: Walkers proactively approach the player with LLM-generated opening lines
+- **8 approach types** with priority: arc milestone, elimination reaction, warning check, vulnerability, offer alliance, crisis aftermath, introduction, proximity
+- **Approach banner UI**: Reply (opens full chat), Nod (+3 relationship), Ignore (-2 relationship), 30s auto-dismiss
+- **Server endpoint**: New `/api/approach` SSE streaming endpoint
+
+### Character Arc System
+- **Walker arc stages**: Each Tier 1 walker has 5 phases (introduction → opening_up → vulnerability → crisis → farewell) with mile ranges and prompt hints
+- **Arc context injection**: LLM agents receive arc phase, conversation count, revealed facts, and player actions in their context
+- **Conversation tracking**: conversationCount, revealedFacts (from info tool calls), playerActions (sharing food/water, crisis help)
+
+### NPC Relationship Arcs
+- **8 NPC relationship arcs** (~25 stages): Garraty-McVries, McVries-Barkovitch, Baker-Scramm, Garraty-Stebbins, Parker-Garraty, Olson-McVries, Harkness-Baker, Scramm-Garraty
+- **Arc-aware overheard selection**: Relationship arc stages fire before random pair selection, with "Previously..." context injection
+
+### Walker Dossier
+- **Click walker → dossier**: Shows name, archetype, relationship, conversation count, alliance status, warnings, revealed facts
+- **Talk button**: Opens full LLM chat from dossier panel
+
+### Crisis System
+- **Crisis events**: Moral dilemmas with timed decisions and gameplay consequences
+- **Player action tracking**: Crisis resolutions tracked in walker's playerActions for LLM context
+
 ## 0.3.0 — 2026-02-26
 
 Stable DOM, generative music, game feel improvements.
