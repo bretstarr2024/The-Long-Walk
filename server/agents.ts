@@ -26,7 +26,6 @@ export function getOrCreateAgent(walker: WalkerProfile): Agent {
     tools: ALL_TOOLS,
     model: MODEL,
     modelSettings: {
-      temperature: 0.9,
       maxTokens: 200,
     },
   });

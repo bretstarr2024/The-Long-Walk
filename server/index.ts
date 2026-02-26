@@ -60,13 +60,13 @@ app.post('/api/chat/:walkerId', async (c) => {
   const history = getHistory(walkerId);
 
   // Build input items for the agent
+  // Only user/assistant roles are supported in Agents SDK input items,
+  // so we embed the game context as a prefix on the player's message.
   const inputItems: Array<{ role: string; content: string }> = [
     // Previous conversation history
     ...history,
-    // Current game context as system message
-    { role: 'developer', content: contextBlock },
-    // Player's message
-    { role: 'user', content: message },
+    // Player's message with game context embedded
+    { role: 'user', content: `[GAME STATE]\n${contextBlock}\n\n[PLAYER SAYS]\n${message}` },
   ];
 
   // Record player message in history
@@ -92,9 +92,9 @@ app.post('/api/chat/:walkerId', async (c) => {
           // Iterate stream events to extract text
           for await (const event of result) {
             if (event.type === 'raw_model_stream_event') {
-              // Extract text deltas from raw model stream
               const data = event.data as any;
-              if (data?.type === 'response.output_text.delta' && data.delta) {
+              // The Agents SDK emits 'output_text_delta' (not 'response.output_text.delta')
+              if (data?.type === 'output_text_delta' && data.delta) {
                 fullText += data.delta;
                 send('token', JSON.stringify({ text: data.delta }));
               }
