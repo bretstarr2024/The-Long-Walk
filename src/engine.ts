@@ -36,8 +36,14 @@ export function gameTick(state: GameState, realDeltaMs: number) {
   // Update all NPCs
   updateAllNPCs(state, gameMinutes);
 
-  // Check NPC eliminations
+  // NPC warning system (issues warnings when speed < 4.0, eliminates at 3)
+  checkNPCWarnings(state, gameMinutes);
+
+  // Backstop: force elimination if way past their mile
   checkNPCEliminations(state);
+
+  // Update position transition animation
+  updatePositionTransition(gameMinutes);
 
   // Update environment
   updateEnvironment(state);
@@ -403,16 +409,23 @@ function updateNPCBehavior(state: GameState, w: WalkerState) {
   const data = getWalkerData(state, w.walkerNumber);
   if (!data) return;
 
-  const approachingElim = state.world.milesWalked > (data.eliminationMile - 15);
+  const mile = state.world.milesWalked;
+  const variance = (data.tier === 1) ? 3 : (data.tier === 2) ? 5 : 8;
+  const elimMile = data.eliminationMile + (Math.sin(w.walkerNumber * 7.3) * variance);
+  const distToElim = elimMile - mile;
 
-  if (approachingElim) {
-    if (w.stamina < 20 || state.world.milesWalked > (data.eliminationMile - 5)) {
-      w.behavioralState = 'breaking_down';
-      w.speed = 3.2 + Math.random() * 0.8;
-    } else {
-      w.behavioralState = 'struggling';
-      w.speed = 3.8 + Math.random() * 0.4;
-    }
+  if (distToElim <= 0) {
+    // Past elimination mile: speed locked well below 4.0, doomed
+    w.behavioralState = 'breaking_down';
+    w.speed = 2.5 + Math.random() * 0.5;
+  } else if (distToElim < 5) {
+    // Close to elimination: breaking down, mostly below 4.0
+    w.behavioralState = 'breaking_down';
+    w.speed = 3.0 + Math.random() * 0.9; // 3.0–3.9, occasionally touches 3.9
+  } else if (distToElim < 15) {
+    // Approaching: struggling, sometimes dipping below 4.0
+    w.behavioralState = 'struggling';
+    w.speed = 3.6 + Math.random() * 0.7; // 3.6–4.3, straddling the line
   } else if (w.stamina < 30) {
     w.behavioralState = 'struggling';
   } else {
@@ -421,7 +434,111 @@ function updateNPCBehavior(state: GameState, w: WalkerState) {
 }
 
 // ============================================================
-// NPC ELIMINATION
+// NPC WARNING SYSTEM
+// Walkers below 4.0 mph accumulate warnings just like the player.
+// Three warnings = elimination (gunshot).
+// ============================================================
+
+// Track slow-time accumulation per NPC (game-minutes below 4.0 mph)
+const npcSlowAccum = new Map<number, number>();
+// Track last warning time per NPC (game hours) — enforces cooldown between warnings
+const npcLastWarningHour = new Map<number, number>();
+// Track post-warning speed boost per NPC (remaining game-minutes of adrenaline)
+const npcWarningBoost = new Map<number, number>();
+
+const WARNING_ACCUM_THRESHOLD = 8;  // game-minutes below 4.0 to trigger warning
+const WARNING_COOLDOWN = 20;         // game-minutes minimum between warnings
+const WARNING_BOOST_DURATION = 8;    // game-minutes of fight-to-survive speed boost
+
+function checkNPCWarnings(state: GameState, gameMinutes: number) {
+  for (const w of state.walkers) {
+    if (!w.alive) continue;
+
+    // --- Post-warning boost: walker fights to keep pace ---
+    const boost = npcWarningBoost.get(w.walkerNumber) || 0;
+    if (boost > 0) {
+      npcWarningBoost.set(w.walkerNumber, boost - gameMinutes);
+      // Override speed: adrenaline pushes them above 4.0 temporarily
+      w.speed = Math.max(w.speed, 4.1 + Math.random() * 0.3);
+      npcSlowAccum.set(w.walkerNumber, 0); // reset slow time during boost
+      continue; // skip warning check while boosted
+    }
+
+    if (w.speed < 4.0) {
+      // Reset walk-off progress — they're back under 4.0
+      w.warningTimer = 0;
+
+      // Accumulate slow time
+      const accum = (npcSlowAccum.get(w.walkerNumber) || 0) + gameMinutes;
+      npcSlowAccum.set(w.walkerNumber, accum);
+
+      // Check cooldown since last warning
+      const lastWarnHour = npcLastWarningHour.get(w.walkerNumber) || -999;
+      const minutesSinceLastWarn = (state.world.hoursElapsed - lastWarnHour) * 60;
+      const cooldownMet = minutesSinceLastWarn >= WARNING_COOLDOWN;
+
+      // Issue warning after threshold AND cooldown met
+      if (accum >= WARNING_ACCUM_THRESHOLD && w.warnings < 3 && cooldownMet) {
+        issueNPCWarning(state, w);
+        npcSlowAccum.set(w.walkerNumber, 0);
+        npcLastWarningHour.set(w.walkerNumber, state.world.hoursElapsed);
+
+        // Give them a fighting chance (adrenaline boost)
+        if (w.warnings < 3) {
+          npcWarningBoost.set(w.walkerNumber, WARNING_BOOST_DURATION);
+        }
+      }
+
+      // Three warnings: eliminated
+      if (w.warnings >= 3) {
+        const data = getWalkerData(state, w.walkerNumber);
+        if (data) eliminateWalker(state, w, data);
+      }
+    } else {
+      // Above 4.0 — reset slow accumulator
+      npcSlowAccum.set(w.walkerNumber, 0);
+
+      // Walk-off timer: 60 game-minutes above 4.0 clears one warning
+      if (w.warnings > 0) {
+        w.warningTimer += gameMinutes;
+        if (w.warningTimer >= 60) {
+          w.warnings--;
+          w.warningTimer = 0;
+          const data = getWalkerData(state, w.walkerNumber);
+          if (data && w.position === state.player.position) {
+            addNarrative(state, `${data.name} picks up the pace. Warning walked off.`, 'system');
+          }
+        }
+      }
+    }
+  }
+}
+
+function issueNPCWarning(state: GameState, w: WalkerState) {
+  w.warnings++;
+  const data = getWalkerData(state, w.walkerNumber);
+  if (!data) return;
+
+  const ordinal = w.warnings === 1 ? 'First' : w.warnings === 2 ? 'Second' : 'Third';
+
+  if (w.position === state.player.position) {
+    // Nearby: full announcement, you hear the soldier
+    addNarrative(state,
+      `"Warning. Walker #${w.walkerNumber}. ${ordinal} warning." ${data.name}.`,
+      'warning'
+    );
+  } else if (data.tier <= 2) {
+    // Named walkers: you catch it from a distance
+    addNarrative(state,
+      `From the ${w.position} of the pack: "Warning. Walker #${w.walkerNumber}. ${ordinal} warning." ${data.name}.`,
+      'warning'
+    );
+  }
+  // Tier 3 at different position: silent (too many to narrate)
+}
+
+// ============================================================
+// NPC ELIMINATION (backstop — normally warnings handle this)
 // ============================================================
 
 function checkNPCEliminations(state: GameState) {
@@ -432,12 +549,37 @@ function checkNPCEliminations(state: GameState) {
     const data = getWalkerData(state, w.walkerNumber);
     if (!data) continue;
 
-    // Eliminate if past their mile (with small random variance)
     const variance = (data.tier === 1) ? 3 : (data.tier === 2) ? 5 : 8;
     const elimMile = data.eliminationMile + (Math.sin(w.walkerNumber * 7.3) * variance);
 
-    if (mile >= elimMile) {
-      eliminateWalker(state, w, data);
+    // Past their elimination mile: start degrading speed to trigger natural warnings
+    if (mile >= elimMile && w.warnings < 3) {
+      const milesOverdue = mile - elimMile;
+      // Gradually slow them down — the further past, the worse
+      const slowFactor = Math.min(0.8, milesOverdue * 0.15);
+      w.speed = Math.max(2.0, w.speed - slowFactor);
+      // Their decline makes them struggle visibly
+      if (w.behavioralState !== 'breaking_down' && milesOverdue > 1) {
+        w.behavioralState = 'struggling';
+      }
+      if (milesOverdue > 3) {
+        w.behavioralState = 'breaking_down';
+      }
+    }
+
+    // Hard backstop: if very overdue, force warnings — but spaced at least 5 game-minutes apart
+    if (mile >= elimMile + 8 && w.warnings < 3) {
+      const lastWarnHour = npcLastWarningHour.get(w.walkerNumber) || -999;
+      const minutesSinceLast = (state.world.hoursElapsed - lastWarnHour) * 60;
+      if (minutesSinceLast >= 5) {
+        issueNPCWarning(state, w);
+        npcLastWarningHour.set(w.walkerNumber, state.world.hoursElapsed);
+        // Brief adrenaline even from backstop (they fight it)
+        npcWarningBoost.set(w.walkerNumber, 3);
+      }
+      if (w.warnings >= 3) {
+        eliminateWalker(state, w, data);
+      }
     }
   }
 }
@@ -583,8 +725,33 @@ export function setPlayerSpeed(state: GameState, speed: number) {
   state.player.targetSpeed = Math.max(0, Math.min(7, speed));
 }
 
+// Position transition state — for smooth animation
+let positionTransition: { from: string; to: string; progress: number } | null = null;
+
+export function getPositionTransition() { return positionTransition; }
+
 export function setPlayerPosition(state: GameState, pos: import('./types').PackPosition) {
+  const prev = state.player.position;
   state.player.position = pos;
+
+  // Temporarily boost speed — you jog to change position
+  state.player.speed = Math.min(7, state.player.speed + 0.8);
+
+  // Small stamina cost for hustling
+  state.player.stamina = Math.max(0, state.player.stamina - 2);
+
+  // Start smooth animation transition (0 → 1 over time)
+  positionTransition = { from: prev, to: pos, progress: 0 };
+}
+
+// Called from gameTick to advance position animation
+export function updatePositionTransition(gameMinutes: number) {
+  if (!positionTransition) return;
+  // Animate over ~2 game minutes (2 real seconds at 1x)
+  positionTransition.progress += gameMinutes / 2;
+  if (positionTransition.progress >= 1) {
+    positionTransition = null;
+  }
 }
 
 export function formAlliance(state: GameState, walkerNum: number): boolean {
