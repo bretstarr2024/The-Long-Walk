@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.8.1 — 2026-02-27
+
+Chat header redesign, stat icons, error handling, and speech bubble fix.
+
+### Chat Header Redesign
+- **Column layout**: Speaker name + STOP button on top row, relationship gauge, then stat bars — decluttered from cramped single-row
+- **STOP THE WORLD button**: Bigger, amber-colored, clearly labeled "⏸ STOP THE WORLD" (was tiny "■ STOP")
+- **Visible stat bars**: Height doubled (4px → 8px), numeric values displayed, good/caution/danger color coding (green/amber/red)
+- **STM → STA**: Renamed stamina label in chat header for consistency with HUD
+
+### HUD Stat Icons + Tooltips
+- **8 stat icons**: Colored SVG icons for STA (green clock), HYD (blue droplet), HUN (amber lunchbox), PAI (red zigzag), MOR (blue heart), CLR (purple sun), BDR (yellow organ), BWL (brown intestine)
+- **Hover tooltips**: Each stat row shows full name and management hint on hover (e.g., "Stamina: Physical endurance. Lower effort to recover.")
+
+### Server Error Classification
+- **`classifyAgentError()`**: Replaces generic "Agent failed" with specific user-safe messages: quota exceeded, rate limited, timed out, model unavailable, auth error, content filtered, conversation too long
+- Removed static `errorMessage` parameter from `createSSEResponse` — all 3 endpoints now use dynamic classification
+
+### Action Icons
+- **Pee icon**: Yellow droplet SVG
+- **Poop icon**: Brown swirl SVG
+
+### Bug Fixes
+- **Speech bubble flicker**: Switched from innerHTML rebuild every 200ms (re-triggering CSS animation) to stable DOM — create/remove individual elements by bubble ID, toggle fade class via classList
+
 ## 0.8.0 — 2026-02-27
 
 Playtest-driven overhaul — book-accurate warnings, speech bubble system, icon system, and 4 UX fixes.
