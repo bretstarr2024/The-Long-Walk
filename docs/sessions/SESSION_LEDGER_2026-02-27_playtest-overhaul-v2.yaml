@@ -1,0 +1,70 @@
+session_id: "2026-02-27-playtest-overhaul-v2"
+date: "2026-02-27"
+branch: "main"
+version: "0.8.0"
+prior_session: "2026-02-27-audit-remediation"
+
+build_verification:
+  client_typescript: "pass"
+  server_typescript: "pass"
+  vite_build: "pass"
+  validation_suite: "blocked — Node.js 25.6.1 import.meta.env issue (pre-existing, unrelated)"
+
+commits:
+  - hash: "4c0fe2a"
+    message: "feat(client): Playtest overhaul — warnings, speech bubbles, icons, UX fixes (v0.8.0)"
+  - hash: "7e05826"
+    message: "docs(changelog): Add v0.8.0 entry — playtest overhaul + visualization roadmap"
+
+artifacts_updated:
+  - path: "src/engine.ts"
+    change: "Book-accurate warning format (player + NPC), removed name from NPC warnings, added warning reaction speech bubbles via addSpeechBubble import"
+  - path: "src/narrative.ts"
+    change: "4 scripted scene warnings updated to book format, checkOverheards redirected to queueOverheardBubbles"
+  - path: "src/overhear.ts"
+    change: "LLM ambient overheards redirected to speech bubbles, parse Name:text format from LLM response"
+  - path: "src/ui.ts"
+    change: "ICON system (11 SVGs), speech bubble renderer + exports, approach stable DOM, chat close btn top-right, scene cache fix, think cooldown, icons on actions/chat/dossier"
+  - path: "src/styles.css"
+    change: "Speech bubble CSS (container, bubbles, tails, animations), icon color classes, chat-close-btn, responsive breakpoint for bubbles"
+  - path: "src/types.ts"
+    change: "SpeechBubble interface, speechBubbles[] + nextBubbleId on GameState, lastThinkMile on PlayerState"
+  - path: "src/state.ts"
+    change: "Default values for speechBubbles, nextBubbleId, lastThinkMile"
+  - path: "docs/CHANGELOG.md"
+    change: "v0.8.0 entry"
+  - path: "docs/ROADMAP_visualization.md"
+    change: "New file — road visualization overhaul roadmap"
+
+decisions_made:
+  - decision: "Warning format uses periods, not exclamations"
+    rationale: "Book-accurate — King describes flat, mechanical soldier callouts. Periods convey the dead tone better."
+  - decision: "Speech bubbles positioned top-right (340px wide), not centered"
+    rationale: "Avoids overlapping with approach banners (centered) and scene overlays (centered). Right-aligned is less intrusive during gameplay."
+  - decision: "engine.ts → ui.ts circular import for addSpeechBubble"
+    rationale: "Same accepted pattern as engine ↔ crises. Runtime-only import, never at module init. Vite handles correctly."
+  - decision: "5-mile cooldown for Think About Prize"
+    rationale: "Matches Encourage (5mi) pattern. Prevents morale exploit while still being useful."
+  - decision: "Icons are inline SVG, not emoji or font icons"
+    rationale: "Full color control via CSS currentColor, no external font dependency, consistent across platforms."
+
+open_questions:
+  - "Do the speech bubble fade timings feel right in practice? May need tuning after playtest."
+  - "Should warning reaction bubbles also fire for player warnings, or just NPC warnings?"
+  - "Should overheard conversations still log full dialogue to narrative, or just the brief note?"
+
+known_risks:
+  - "engine.ts → ui.ts circular import — accepted pattern, but adds another circular edge to the dependency graph"
+  - "Speech bubble stagger uses setTimeout — if game is paused, bubbles still appear on real-time schedule"
+  - "npm run validate broken on Node.js 25.6.1 (import.meta.env undefined) — pre-existing, not from this session"
+
+explicitly_deferred:
+  - "Road visualization overhaul — documented in docs/ROADMAP_visualization.md, too large for one session"
+  - "Validation suite fix for Node.js 25 — needs import.meta.env polyfill or conditional import"
+  - "Mobile/tablet testing of speech bubbles and new responsive breakpoints"
+
+next_actions:
+  - "Playtest full game loop with v0.8.0 to verify speech bubbles, icons, and warning format feel right"
+  - "Tune speech bubble durations and stagger timing based on playtest feedback"
+  - "Fix npm run validate for Node.js 25 (mock import.meta.env or isolate agentClient)"
+  - "Begin road visualization overhaul (docs/ROADMAP_visualization.md)"
