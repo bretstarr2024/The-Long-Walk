@@ -1,0 +1,49 @@
+session_id: "2026-02-27-playtest-fixes-v083"
+date: "2026-02-27"
+branch: "main"
+version: "0.8.3"
+prior_session: "2026-02-27-playtest-fixes-v082"
+
+build_verification:
+  client_typescript: "pass"
+  server_typescript: "pass"
+  vite_build: "pass"
+
+commits:
+  - hash: "58d88c4"
+    message: "fix(client): Music startup, Barkovitch trigger, story button, social cache, pleading voice (v0.8.3)"
+
+artifacts_updated:
+  - path: "src/main.ts"
+    change: "startAudio() now awaits ensureResumed() before startAmbientDrone() — fixes silent music on title page"
+  - path: "src/audio.ts"
+    change: "ensureResumed() returns Promise; playPleading() uses male voice filter and pitch 0.9 (was 1.3)"
+  - path: "src/narrative.ts"
+    change: "barkovitch_dance triggerConditions now requires eliminationCount >= 40"
+  - path: "src/ui.ts"
+    change: "Removed relationship<10 guard from handleChatTellStory; cachedSocialActionsHtml cleared on overlay teardown and creation"
+  - path: "docs/CHANGELOG.md"
+    change: "v0.8.3 entry added"
+
+decisions_made:
+  - decision: "Require 40 eliminations for Barkovitch dance (not 20 or 60)"
+    rationale: "40 out of 99 is roughly 40% dead — scene feels earned but doesn't require near-endgame state"
+  - decision: "Pitch 0.9 for pleading voice (not 0.7 or 1.0)"
+    rationale: "Low enough to sound male, close enough to normal to avoid robotic distortion. Rate 1.2 conveys panic."
+  - decision: "No food/water inventory system"
+    rationale: "User confirmed cooldown-based gating is sufficient. Cooldowns already prevent eat-after-share."
+
+open_questions:
+  - "Should pleading voice vary per walker (different pitch/rate per elimination)?"
+  - "Should effort meter show sweet spot zone indicator?"
+
+known_risks:
+  - "Web Speech API male voice filter uses /male/i regex on voice name — may not find male voice on all platforms (falls back to first English voice)"
+  - "AudioContext resume is async — if Promise resolves slowly, there could still be a brief delay before music starts"
+
+explicitly_deferred:
+  - "Food/water supply inventory system — user confirmed cooldowns are sufficient"
+
+next_actions:
+  - "Playtest v0.8.3 on production — verify all 5 fixes"
+  - "Continue with visualization roadmap or next round of playtest feedback"
