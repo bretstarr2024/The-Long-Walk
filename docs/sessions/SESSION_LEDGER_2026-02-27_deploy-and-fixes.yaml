@@ -1,0 +1,70 @@
+session_id: "2026-02-27-deploy-and-fixes"
+date: "2026-02-27"
+branch: "main"
+version: "0.6.1"
+prior_session: "2026-02-26-playtest-overhaul"
+
+build_verification:
+  client_typescript: "pass"
+  server_typescript: "pass"
+  vite_build: "pass"
+
+commits:
+  - hash: "3309284"
+    message: "feat(deploy): Railway production deployment — single-service architecture"
+  - hash: "d6a5e7d"
+    message: "fix(client): Gunshot timing, crisis buttons, canvas DPI scaling, terrain grade labels"
+  - hash: "d257488"
+    message: "docs(changelog): Add v0.6.1 entry — deployment + 4 bug fixes"
+
+artifacts_updated:
+  - path: "server/index.ts"
+    change: "Dynamic port, CORS for Railway domain, static file serving + SPA fallback"
+  - path: "src/agentClient.ts"
+    change: "Relative URLs in production via ?? operator + import.meta.env.DEV"
+  - path: "package.json"
+    change: "Added start script, moved tsx to dependencies, added engines field"
+  - path: "src/main.ts"
+    change: "Delay gunshots 3s after warnings so voice plays first"
+  - path: "src/ui.ts"
+    change: "Clear crisis container DOM immediately in handleCrisisOption"
+  - path: "src/visualization.ts"
+    change: "DPI scaling via setTransform, font sizes 5-7px→9-12px, terrain grade labels"
+  - path: "docs/CHANGELOG.md"
+    change: "Added v0.6.1 entry"
+
+decisions_made:
+  - decision: "Single-service Railway deployment (not separate client + server services)"
+    rationale: "Eliminates CORS complexity, simpler configuration, one domain"
+  - decision: "Use ?? (nullish coalescing) not || for SERVER_URL fallback"
+    rationale: "Empty string '' is a valid production value (same-origin), || would skip it"
+  - decision: "ctx.setTransform for DPI scaling instead of scaling all coordinates"
+    rationale: "All existing coordinate math works unchanged in CSS pixel space"
+  - decision: "Gunshot delay is 3000ms fixed, not dynamic based on speech length"
+    rationale: "Simple and reliable; warning voice is ~2-3s with buzzer + speech"
+
+open_questions:
+  - "Does the deployed Railway instance survive long enough without sleeping? (free tier may have timeout)"
+  - "Are font sizes 9-12px readable on all screen sizes, or should they scale with canvas width?"
+
+known_risks:
+  - "Railway deployment has OPENAI_API_KEY in env vars — if project is public, key is visible in dashboard"
+  - "Gunshot 3s delay is hardcoded — if warning voice is longer than 3s, overlap occurs"
+  - "Canvas DPI scaling not tested on non-Retina displays (dpr=1) — should work but untested visually"
+  - "Effort death spiral still possible: uphill + low stamina → maxSpeed caps → can't maintain 4.0 mph"
+
+explicitly_deferred:
+  - "Pain recovery mechanic — still deferred since v0.5.0"
+  - "Tier 2 arc stages — architecture supports it, no data defined"
+  - "Crowd density pulsing animation — cut for scope in v0.6.0"
+  - "Alliance line animation — static dashed lines only"
+  - "Railway custom domain — using default .up.railway.app domain for now"
+
+next_actions:
+  - "Playtest the deployed Railway instance end-to-end"
+  - "Verify canvas DPI scaling looks correct across browsers/displays"
+  - "Test crisis overlay button clicks in deployed build"
+  - "Verify gunshot timing sounds right after 3rd warning"
+  - "Check terrain grade labels are readable and positioned correctly"
+  - "Assess effort bar balance — can a player survive 200+ miles?"
+  - "Consider Railway Pro if free tier has uptime limitations"
