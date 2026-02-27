@@ -51,10 +51,11 @@ export function initAudio(): boolean {
   }
 }
 
-export function ensureResumed() {
+export function ensureResumed(): Promise<void> {
   if (ctx && ctx.state === 'suspended') {
-    ctx.resume();
+    return ctx.resume();
   }
+  return Promise.resolve();
 }
 
 // ============================================================
@@ -564,10 +565,13 @@ export function playPleading(): boolean {
   const text = PLEAS[Math.floor(Math.random() * PLEAS.length)];
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.rate = 1.2;  // fast, panicked
-  utterance.pitch = 1.3; // higher pitch, terrified
+  utterance.pitch = 0.9; // low male voice
   utterance.volume = 0.7;
   const voices = speechSynthesis.getVoices();
-  const english = voices.find(v => v.lang.startsWith('en'));
+  const maleEnglish = voices.find(
+    v => v.lang.startsWith('en') && /male/i.test(v.name),
+  );
+  const english = maleEnglish || voices.find(v => v.lang.startsWith('en'));
   if (english) utterance.voice = english;
   speechSynthesis.speak(utterance);
   return true;

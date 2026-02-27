@@ -34,10 +34,11 @@ async function init() {
   requestAnimationFrame(gameLoop);
 
   // Initialize audio on first user interaction (browser autoplay policy)
-  const startAudio = () => {
+  const startAudio = async () => {
     if (!isAudioInitialized()) {
       initAudio();
-      startAmbientDrone(); // Start music on first interaction (title page)
+      await ensureResumed(); // Resume context BEFORE creating audio nodes
+      startAmbientDrone();
       droneStarted = true;
       console.log('[Main] Audio initialized on user gesture');
       document.removeEventListener('click', startAudio);

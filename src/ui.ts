@@ -272,7 +272,6 @@ function handleChatShareWater(state: GameState) {
 function handleChatTellStory(state: GameState) {
   const w = getChatWalker(state);
   if (!w || !w.alive) return;
-  if (w.relationship < 10) return;
   if (state.world.milesWalked - w.lastStoryMile < 10) return;
   w.lastStoryMile = state.world.milesWalked;
   w.morale = Math.min(100, w.morale + 5);
@@ -1946,6 +1945,7 @@ function createLLMOverlay(container: HTMLElement, dlg: GameState['llmDialogue'])
   llmOverlayWalkerId = dlg.walkerId;
   renderedChatMsgCount = 0;
   llmStreamingShown = false;
+  cachedSocialActionsHtml = '';
 
   // Focus input
   const inp = document.getElementById('llm-chat-input') as HTMLInputElement;
@@ -2017,6 +2017,7 @@ function updateLLMChatOverlay(state: GameState) {
       llmOverlayWalkerId = -1;
       renderedChatMsgCount = 0;
       llmStreamingShown = false;
+      cachedSocialActionsHtml = '';
     }
     return;
   }

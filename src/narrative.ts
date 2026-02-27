@@ -222,7 +222,7 @@ const SCRIPTED_EVENTS: GameEvent[] = [
     id: 'barkovitch_dance', type: 'scripted_scene', triggerMile: 245, priority: 10, fired: false,
     triggerConditions: (s) => {
       const b = getWalkerState(s, 5);
-      return !!b && b.alive;
+      return !!b && b.alive && s.eliminationCount >= 40;
     },
     presentation: 'scene',
     scenePanels: [

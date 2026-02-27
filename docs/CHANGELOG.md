@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.8.3 — 2026-02-27
+
+Playtest fixes — 5 bugs from production testing.
+
+### Bug Fixes
+- **Music on title page**: `ensureResumed()` now awaited before `startAmbientDrone()` — AudioContext was suspended when oscillators were created, causing silent playback on some browsers
+- **Barkovitch dance scene too early**: Added `eliminationCount >= 40` prerequisite — scene no longer fires at mile 245 with only ~14 dead
+- **Story button unresponsive**: Removed stale `relationship < 10` guard from `handleChatTellStory()` — button was ungated in v0.8.2 but handler still silently blocked low-relationship walkers
+- **Social buttons missing on NPC approach**: `cachedSocialActionsHtml` now cleared on overlay teardown and creation — stale HTML cache caused `updateChatSocialActions()` to skip rendering when new overlay matched previous chat's button state
+- **Pleading voice female/robotic**: Added male voice filter (matching `playWarningVoice()` pattern), lowered pitch from 1.3 to 0.9
+
 ## 0.8.2 — 2026-02-27
 
 Playtest fixes — elimination timing, effort bar redesign, speech bubble improvements, and 3 UX fixes.
