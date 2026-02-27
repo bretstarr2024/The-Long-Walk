@@ -160,8 +160,9 @@ let walkerDataMapSize = 0;
 export function initVisualization(canvas: HTMLCanvasElement) {
   canvas.addEventListener('mousemove', (e) => {
     const rect = canvas.getBoundingClientRect();
-    const mx = (e.clientX - rect.left) * (canvas.width / rect.width);
-    const my = (e.clientY - rect.top) * (canvas.height / rect.height);
+    // Convert to CSS pixel coordinates (not buffer pixels)
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
     (canvas as any)._mouseX = mx;
     (canvas as any)._mouseY = my;
   });
@@ -181,18 +182,23 @@ export function updateVisualization(state: GameState, canvas: HTMLCanvasElement)
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
 
-  // Sync canvas buffer to display size (prevents aspect ratio distortion)
+  // Sync canvas buffer to display size with DPI scaling (sharp on Retina)
   const rect = canvas.getBoundingClientRect();
   const displayW = Math.floor(rect.width);
   const displayH = Math.floor(rect.height);
-  if (displayW > 0 && displayH > 0 && (canvas.width !== displayW || canvas.height !== displayH)) {
-    canvas.width = displayW;
-    canvas.height = displayH;
+  const dpr = window.devicePixelRatio || 1;
+  const bufferW = Math.floor(displayW * dpr);
+  const bufferH = Math.floor(displayH * dpr);
+  if (bufferW > 0 && bufferH > 0 && (canvas.width !== bufferW || canvas.height !== bufferH)) {
+    canvas.width = bufferW;
+    canvas.height = bufferH;
   }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
   frameCounter++;
-  const W = canvas.width;
-  const H = canvas.height;
+  // Use CSS pixel dimensions for all coordinate math
+  const W = displayW;
+  const H = displayH;
   const mx = (canvas as any)._mouseX ?? -1;
   const my = (canvas as any)._mouseY ?? -1;
 
@@ -464,7 +470,7 @@ export function updateVisualization(state: GameState, canvas: HTMLCanvasElement)
 
   // --- Noise grain ---
   const noise = getNoiseTexture(W, H);
-  ctx.drawImage(noise, 0, 0);
+  ctx.drawImage(noise, 0, 0, W, H);
 
   // --- Scan lines ---
   ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
@@ -475,7 +481,7 @@ export function updateVisualization(state: GameState, canvas: HTMLCanvasElement)
   // --- Terrain elevation strip (left edge, ±10 miles) ---
   {
     const stripX = 4;
-    const stripW = 12;
+    const stripW = 18;
     const stripH = H * 0.6;
     const stripY = H * 0.2;
     const currentMile = state.world.milesWalked;
@@ -507,11 +513,26 @@ export function updateVisualization(state: GameState, canvas: HTMLCanvasElement)
     ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
     ctx.fillRect(stripX, stripY + centerRow - 0.5, stripW, 1);
 
-    // Label above strip
-    ctx.fillStyle = 'rgba(64, 255, 96, 0.3)';
-    ctx.font = '5px "IBM Plex Mono", monospace';
+    // Grade label next to current position marker
+    const currentSeg = getRouteSegment(currentMile);
+    let gradeText: string;
+    let gradeColor: string;
+    switch (currentSeg.terrain) {
+      case 'uphill':   gradeText = '+6% \u25B2'; gradeColor = 'rgba(255, 120, 60, 0.8)'; break;
+      case 'downhill': gradeText = '-3% \u25BC'; gradeColor = 'rgba(80, 170, 255, 0.8)'; break;
+      case 'rough':    gradeText = 'ROUGH';  gradeColor = 'rgba(255, 210, 60, 0.7)'; break;
+      default:         gradeText = 'FLAT';   gradeColor = 'rgba(64, 255, 96, 0.5)'; break;
+    }
+    ctx.fillStyle = gradeColor;
+    ctx.font = 'bold 9px "IBM Plex Mono", monospace';
     ctx.textAlign = 'left';
-    ctx.fillText('ELEV', stripX, stripY - 3);
+    ctx.fillText(gradeText, stripX + stripW + 4, stripY + centerRow + 3);
+
+    // Label above strip
+    ctx.fillStyle = 'rgba(64, 255, 96, 0.4)';
+    ctx.font = '9px "IBM Plex Mono", monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText('GRADE', stripX, stripY - 5);
   }
 
   // --- Vignette (darker edges) ---
@@ -550,15 +571,15 @@ export function updateVisualization(state: GameState, canvas: HTMLCanvasElement)
 
   // --- Mode indicator (top-left) ---
   ctx.fillStyle = hudDim;
-  ctx.font = '6px "IBM Plex Mono", monospace';
+  ctx.font = '10px "IBM Plex Mono", monospace';
   ctx.textAlign = 'left';
-  ctx.fillText('IR THERMAL', 4, 10);
-  ctx.fillText(`MI ${state.world.milesWalked.toFixed(1)}`, 4, 19);
-  ctx.fillText(`${state.world.currentTime}`, 4, 28);
+  ctx.fillText('IR THERMAL', 4, 14);
+  ctx.fillText(`MI ${state.world.milesWalked.toFixed(1)}`, 4, 27);
+  ctx.fillText(`${state.world.currentTime}`, 4, 40);
 
   // --- Position labels (right edge) ---
   ctx.fillStyle = hudDim;
-  ctx.font = '6px "IBM Plex Mono", monospace';
+  ctx.font = '10px "IBM Plex Mono", monospace';
   ctx.textAlign = 'right';
   ctx.fillText('FRONT', W - 4, H * 0.2);
   ctx.fillText('MIDDLE', W - 4, H * 0.49);
@@ -573,17 +594,17 @@ export function updateVisualization(state: GameState, canvas: HTMLCanvasElement)
       { mile: Math.floor(currentMile),     yFrac: 0.5 },
       { mile: Math.floor(currentMile) + 1, yFrac: 0.3 },
     ];
-    ctx.font = '5px "IBM Plex Mono", monospace';
+    ctx.font = '9px "IBM Plex Mono", monospace';
     ctx.textAlign = 'left';
     for (const mp of markerPositions) {
       if (mp.mile < 0 || mp.mile > 400) continue;
       const my2 = H * mp.yFrac;
       // Tick mark
       ctx.fillStyle = hudDim;
-      ctx.fillRect(markerX, my2 - 0.5, 4, 1);
+      ctx.fillRect(markerX, my2 - 0.5, 6, 1);
       // Mile number
       ctx.fillStyle = hudDim;
-      ctx.fillText(`${mp.mile}`, markerX + 6, my2 + 2);
+      ctx.fillText(`${mp.mile}`, markerX + 8, my2 + 3);
     }
   }
 
@@ -603,9 +624,9 @@ export function updateVisualization(state: GameState, canvas: HTMLCanvasElement)
   const aliveCount = state.walkers.reduce((n, w) => n + (w.alive ? 1 : 0), 0);
   const remaining = aliveCount + (state.player.alive ? 1 : 0);
   ctx.fillStyle = hudColor;
-  ctx.font = '7px "IBM Plex Mono", monospace';
+  ctx.font = '11px "IBM Plex Mono", monospace';
   ctx.textAlign = 'left';
-  ctx.fillText(`${remaining} ALIVE`, 4, H - 6);
+  ctx.fillText(`${remaining} ALIVE`, 4, H - 8);
 
   // --- Player label + targeting brackets ---
   {
@@ -628,9 +649,9 @@ export function updateVisualization(state: GameState, canvas: HTMLCanvasElement)
 
     // Label
     ctx.fillStyle = 'rgba(64, 255, 96, 0.8)';
-    ctx.font = 'bold 7px "IBM Plex Mono", monospace';
+    ctx.font = 'bold 12px "IBM Plex Mono", monospace';
     ctx.textAlign = 'center';
-    ctx.fillText('YOU', px, py - 14);
+    ctx.fillText('YOU', px, py - 16);
 
     // Targeting brackets
     ctx.strokeStyle = 'rgba(64, 255, 96, 0.5)';
@@ -669,9 +690,9 @@ export function updateVisualization(state: GameState, canvas: HTMLCanvasElement)
     const x = baseX + jx;
 
     ctx.fillStyle = 'rgba(100, 220, 140, 0.6)';
-    ctx.font = '6px "IBM Plex Mono", monospace';
+    ctx.font = '9px "IBM Plex Mono", monospace';
     ctx.textAlign = 'center';
-    ctx.fillText(`${data.name.split(' ')[0]} #${w.walkerNumber}`, x, baseY - 12);
+    ctx.fillText(`${data.name.split(' ')[0]} #${w.walkerNumber}`, x, baseY - 14);
   }
 
   // --- Allied walker rings ---
@@ -734,13 +755,13 @@ export function updateVisualization(state: GameState, canvas: HTMLCanvasElement)
   // --- Tooltip ---
   if (tooltipWalker) {
     const tw = tooltipWalker;
-    ctx.font = '7px "IBM Plex Mono", monospace';
+    ctx.font = '11px "IBM Plex Mono", monospace';
     const nameW = ctx.measureText(tw.name).width;
     const statW = ctx.measureText(tw.status).width;
-    const boxW = Math.max(nameW, statW) + 12;
-    const boxH = 26;
-    const bx = Math.min(tw.x + 12, W - boxW - 4);
-    const by = Math.max(tw.y - boxH - 6, 4);
+    const boxW = Math.max(nameW, statW) + 14;
+    const boxH = 32;
+    const bx = Math.min(tw.x + 14, W - boxW - 4);
+    const by = Math.max(tw.y - boxH - 8, 4);
 
     ctx.fillStyle = 'rgba(0, 10, 5, 0.88)';
     ctx.fillRect(bx, by, boxW, boxH);
@@ -750,8 +771,8 @@ export function updateVisualization(state: GameState, canvas: HTMLCanvasElement)
 
     ctx.fillStyle = '#40ff60';
     ctx.textAlign = 'left';
-    ctx.fillText(tw.name, bx + 6, by + 10);
+    ctx.fillText(tw.name, bx + 7, by + 13);
     ctx.fillStyle = 'rgba(64, 255, 96, 0.6)';
-    ctx.fillText(tw.status, bx + 6, by + 20);
+    ctx.fillText(tw.status, bx + 7, by + 26);
   }
 }

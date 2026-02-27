@@ -166,6 +166,9 @@ function handleCrisisOption(state: GameState, optionId: string) {
   resolveCrisis(state, optionId);
   cachedCrisisHtml = '';
   cachedActionsHtml = '';
+  // Clear DOM immediately (same pattern as handleSceneClose)
+  const container = document.getElementById('crisis-container');
+  if (container) container.innerHTML = '';
 }
 
 function handleShareFood(state: GameState) {

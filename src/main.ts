@@ -111,10 +111,13 @@ function gameLoop(timestamp: number) {
     checkApproach(state);
 
     // Trigger sounds for new narrative entries
+    // Gunshots are delayed so the 3rd warning voice plays first
+    let pendingGunshots = 0;
     for (let i = prevNarrativeCount; i < state.narrativeLog.length; i++) {
       const entry = state.narrativeLog[i];
-      if (entry.type === 'elimination') playGunshot();
-      else if (entry.type === 'warning') {
+      if (entry.type === 'elimination') {
+        pendingGunshots++;
+      } else if (entry.type === 'warning') {
         const match = entry.text.match(/"([^"]+)"/);
         if (match) {
           playWarningVoice(match[1]);
@@ -122,6 +125,10 @@ function gameLoop(timestamp: number) {
           playWarningBuzzer();
         }
       }
+    }
+    // Fire gunshots after warning voice finishes (~3s for buzzer + speech)
+    for (let g = 0; g < pendingGunshots; g++) {
+      setTimeout(playGunshot, 3000 + g * 500);
     }
 
     // Update drone intensity based on game state
