@@ -1,0 +1,69 @@
+session_id: "2026-02-27-playtest-fixes-v084"
+date: "2026-02-27"
+branch: "main"
+version: "0.8.4"
+prior_session: "2026-02-27-playtest-fixes-v083"
+
+build_verification:
+  client_typescript: "pass"
+  server_typescript: "pass"
+  vite_build: "pass"
+
+commits:
+  - hash: "25170aa"
+    message: "feat(client): Warning visibility, ticket popup, pain/clarity/stats fixes, 10 playtest items (v0.8.4)"
+
+artifacts_updated:
+  - path: "src/engine.ts"
+    change: "issueNPCWarning narrates ALL tiers (was Tier 1/2 only). Backstop uses pendingEliminations queue. Terrain change narrative notifications. getWalkerMotivation() + ticket data in eliminateWalker(). Clarity drain starts hour 6 with pain acceleration + effort drift. totalWarningsReceived counter + contextual causeOfDeath in issueWarning."
+  - path: "src/ui.ts"
+    change: "updateTicket() function + getOrdinal() helper. Stretch action handler + icon. Walk→Walk Together label. Observe boosts morale. closeLLMDialogue pushes to conversationHistory. Cause of death on game over screen. ticket-container div in game HTML."
+  - path: "src/types.ts"
+    change: "TicketData interface. activeTicket on GameState. lastStretchMile, totalWarningsReceived, causeOfDeath on PlayerState."
+  - path: "src/state.ts"
+    change: "Default values for lastStretchMile, totalWarningsReceived, causeOfDeath, activeTicket."
+  - path: "src/styles.css"
+    change: "Ticket popup CSS (dashed perforation, stamp, body, fade animation). si-stretch color. gameover-cause styling. Reduced motion entries for ticket."
+  - path: "src/narrative.ts"
+    change: "getGameStats uses totalWarningsReceived, unique Walkers Talked To count, simplified alliances."
+  - path: "src/data/route.ts"
+    change: "Updated flat/uphill/downhill ambient descriptions to avoid contradicting terrain change notifications."
+  - path: "src/visualization.ts"
+    change: "Mile markers prefixed with 'mi' to avoid confusion with elevation."
+  - path: "docs/CHANGELOG.md"
+    change: "v0.8.4 entry added."
+
+decisions_made:
+  - decision: "Terrain change notifications are narrated, not just shown on GRADE meter"
+    rationale: "Players don't notice the GRADE meter changing — narrative text is the primary attention channel"
+  - decision: "Clarity drain starts at hour 6 (not 16)"
+    rationale: "At hour 16+ the stat was functionally inert — players never saw it drop below 100"
+  - decision: "Ticket auto-dismiss: 5s Tier 3, 8s Tier 1/2"
+    rationale: "Tier 1/2 walkers have names and motivations worth reading; Tier 3 can cycle faster"
+  - decision: "Observe boosts morale (+2 day, +1 night)"
+    rationale: "Gives Observe an immediate tangible benefit — morale is the stat players struggle to manage"
+  - decision: "Stretch costs -2 stamina for 8-12 pain relief, 3-mile cooldown"
+    rationale: "Meaningful stamina trade-off prevents spam while making pain manageable"
+  - decision: "totalWarningsReceived is a separate counter that never decrements"
+    rationale: "player.warnings resets to 0 on walk-off — need a lifetime counter for game over stats"
+  - decision: "causeOfDeath is contextual based on failing stats at time of death"
+    rationale: "More interesting than generic 'got their ticket' — tells the story of how the player fell apart"
+
+open_questions:
+  - "Should ticket popup show for player death too, or just NPCs?"
+  - "Is the ticket popup z-index (160) correct relative to crisis overlays during rapid eliminations?"
+  - "Should effort drift at low clarity be more/less aggressive?"
+
+known_risks:
+  - "Tier 3 NPC warnings were previously silent — making them all narrated may flood the narrative log during mass elimination phases"
+  - "Clarity drain at hour 6 may be too aggressive for new players on their first run"
+  - "npm run validate still fails on Node.js 25 (import.meta.env issue) — pre-existing, not blocking"
+
+explicitly_deferred:
+  - "Sweet spot indicator on effort meter — discussed but not implemented"
+  - "Varied pleading voice per walker — still open from v0.8.3"
+
+next_actions:
+  - "Playtest v0.8.4 on production — verify ticket popups, terrain notifications, stretch action, clarity drain"
+  - "Monitor narrative log density — Tier 3 warnings may create wall-of-text during late game"
+  - "Consider visualization roadmap or next round of playtest feedback"
