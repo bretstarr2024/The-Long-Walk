@@ -7,6 +7,8 @@ import 'dotenv/config';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { serve } from '@hono/node-server';
+import { serveStatic } from '@hono/node-server/serve-static';
+import { readFileSync } from 'fs';
 import { Agent, run } from '@openai/agents';
 import { setDefaultOpenAIKey } from '@openai/agents';
 import { getOrCreateAgent, getHistory, addToHistory, removeLastHistory } from './agents';
@@ -15,7 +17,7 @@ import { createEffectsScope, type GameEffect } from './tools';
 
 // --- Config ---
 const MODEL = 'gpt-5.2-chat-latest';
-const PORT = 3001;
+const PORT = Number(process.env.PORT) || 3001;
 const apiKey = process.env.OPENAI_API_KEY;
 if (!apiKey) {
   console.error('[Server] OPENAI_API_KEY not set. Exiting.');
@@ -33,6 +35,9 @@ const ALLOWED_ORIGINS = new Set([
   'http://localhost:4173',
   'http://127.0.0.1:5173',
 ]);
+if (process.env.RAILWAY_PUBLIC_DOMAIN) {
+  ALLOWED_ORIGINS.add(`https://${process.env.RAILWAY_PUBLIC_DOMAIN}`);
+}
 app.use('*', cors({
   origin: (origin) => ALLOWED_ORIGINS.has(origin) ? origin : 'http://localhost:5173',
   allowMethods: ['GET', 'POST', 'OPTIONS'],
@@ -361,6 +366,18 @@ Context: ${approachContext}
     }
   );
 });
+
+// --- Static file serving (production) ---
+if (process.env.NODE_ENV === 'production' || process.env.RAILWAY_ENVIRONMENT) {
+  app.use('/*', serveStatic({ root: './dist' }));
+  const indexHtml = readFileSync('./dist/index.html', 'utf-8');
+  app.get('*', (c) => {
+    if (c.req.path.startsWith('/api/')) {
+      return c.json({ error: 'Not found' }, 404);
+    }
+    return c.html(indexHtml);
+  });
+}
 
 // --- Start ---
 console.log(`[Server] The Long Walk Agent Server starting on port ${PORT}`);

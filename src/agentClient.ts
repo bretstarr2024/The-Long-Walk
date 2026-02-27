@@ -3,7 +3,8 @@
 // Sends messages to the server and streams responses
 // ============================================================
 
-const SERVER_URL = import.meta.env.VITE_AGENT_SERVER_URL || 'http://localhost:3001';
+const SERVER_URL = import.meta.env.VITE_AGENT_SERVER_URL
+  ?? (import.meta.env.DEV ? 'http://localhost:3001' : '');
 
 export interface TokenEvent { type: 'token'; text: string }
 export interface EffectEvent { type: 'effect'; effectType: string; walkerId?: number; delta?: number; key?: string; value?: boolean; text?: string }
