@@ -1,5 +1,60 @@
 # Changelog
 
+## 0.7.1 — 2026-02-27
+
+Full 8-category code audit remediation — 9 criticals, 27 warnings, ~40 info items fixed across 16 files.
+
+### Critical Fixes
+- **Pee/poop instant-kill**: Bathroom actions could fire when player had 2+ warnings, causing immediate elimination. Added warning count guards (pee: <2, poop: <1)
+- **Crisis keyboard DOM stale**: Pressing 1-4 to resolve crisis didn't clear DOM — overlay stayed visible. Added `container.innerHTML = ''` after resolution
+- **SSE parser chunk boundary bug**: `currentEvent`/`currentData` were scoped inside the read loop in all 3 SSE parsers — multi-chunk events lost state. Moved declarations outside loop
+
+### Security Hardening
+- **Rate limiting**: 10 req/min chat, 5 req/min overhear/approach (IP-based sliding window)
+- **Security headers**: X-Content-Type-Options, X-Frame-Options, Referrer-Policy on all responses
+- **Body size limit**: 50KB max request body
+- **Message validation**: 2000-char cap on chat messages, player name length validation
+- **Error sanitization**: Generic error messages to client, details server-side only
+- **CORS fix**: Unknown origins return null (not wildcard)
+- **escapeHtml() expansion**: Applied to crisis overlay (title, description, options), dialogue overlay, LLM chat header
+
+### Performance Optimization
+- **walkerStateMap O(1)**: New `getWalkerState()` with lazy `Map<number, WalkerState>` — replaced 28 `state.walkers.find()` calls across 7 files
+- **getWalkersRemaining O(1)**: `walkers.length - eliminationCount` instead of `.filter().length`
+- **computeAllyNearby once per tick**: Shared boolean passed to stamina + morale (was computed separately in each)
+- **updateEnemyStatus Tier 1/2 only**: Skips 75 Tier 3 walkers via lazy-built tier12Numbers
+- **getNearbyWalkers caching**: Returns cached result when position + elimination count unchanged
+- **Binary search for route segments**: O(log n) instead of linear `.find()` (~360 calls/frame from terrain strip)
+- **Canvas scanline pre-render**: Offscreen canvas rebuilt only on resize
+- **Canvas ResizeObserver**: Cached dimensions replace per-frame `getBoundingClientRect()`
+- **Noise texture reuse**: Canvas object reused when dimensions match
+- **Narrative log threshold**: Raised to 500/400 (from 200/150), reduces rebuild frequency
+- **Visualization dedup**: Removed duplicate walkerDataMap — uses canonical `getWalkerData()` from state.ts
+
+### Game Logic Fixes
+- **Crisis warningRisk routed through issueWarning()**: Proper sync of lastWarningTime/slowAccum/lastWarningMile
+- **breakAlliance relationship**: Set to -41 (not -40) so `getRelationshipTier()` returns 'enemy' consistently
+- **Unified breakAlliance effects**: Crisis `applyEffects` now matches engine behavior (relationship, isEnemy, walkingTogether, enemies array)
+- **Empty crisis narrative guard**: Prevented empty strings from being added to narrative log
+- **Walk-off timer crisis interaction**: Timer no longer resets during crisis speed overrides
+- **Hostile action cascade**: warningTimer reset after trip/steal prevents NPC double-warning
+
+### Frontend / UX
+- **LLM chat auto-scroll**: Only scrolls when user is near bottom (< 50px threshold)
+- **LLM chat header**: flex-wrap + gap for responsive layout
+- **prefers-reduced-motion**: Disables all CSS animations for motion-sensitive users
+- **Responsive breakpoints**: 900px (2-col), 700px (1-col) for bottom panel grid
+- **ARIA attributes**: role="dialog" aria-modal on overlays, role="log" aria-live="polite" on narrative panel
+- **Chat input**: maxlength="500" attribute
+
+### Server
+- **SSE helper**: Extracted `createSSEResponse()` shared across chat/overhear/approach
+- **Dead code removal**: Removed unused `agentCache` Map and `clearHistory` export from agents.ts
+
+### Audio
+- **Buzzer node cleanup**: Added `onended` disconnect callback to warning buzzer (matching gunshot/pulse pattern)
+- **startAudio listener cleanup**: Event listeners removed after audio initialization
+
 ## 0.7.0 — 2026-02-27
 
 Chat interface, relationships & player interaction overhaul — relationships become the core gameplay loop.
