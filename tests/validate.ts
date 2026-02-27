@@ -5,11 +5,11 @@
 
 import { ALL_WALKERS, NPC_RELATIONSHIPS } from '../src/data/walkers';
 import { ROUTE_SEGMENTS, CROWD_PHASES, AMBIENT_DESCRIPTIONS } from '../src/data/route';
-import { createInitialGameState, getAliveWalkers } from '../src/state';
+import { createInitialGameState, getAliveWalkers, getRelationshipTier } from '../src/state';
 import { gameTick, resetEngineGlobals, requestFood, requestWater } from '../src/engine';
 import { checkScriptedEvents, checkOverheards, checkHallucinations, checkAbsenceEffects, checkEnding } from '../src/narrative';
 import { resolveCrisis, resetCrisisGlobals } from '../src/crises';
-import type { GameState, ArcPhase } from '../src/types';
+import type { GameState, ArcPhase, WalkerState } from '../src/types';
 
 // ============================================================
 // TEST HARNESS
@@ -190,6 +190,43 @@ function runDataIntegrityChecks() {
           `Walker #${w.walkerNumber} (${w.name}): missing '${field}'`);
       }
     }
+  });
+
+  // 11. Enemy/bond state initialization
+  check('Enemy/bond fields initialized correctly', () => {
+    const state = createInitialGameState();
+    assert(state.player.bondedAlly === null, 'bondedAlly should be null');
+    assert(Array.isArray(state.player.enemies), 'enemies should be array');
+    assert(state.player.enemies.length === 0, 'enemies should be empty');
+    assert(state.lastEnemyActionMile === 0, 'lastEnemyActionMile should be 0');
+    for (const w of state.walkers) {
+      assert(w.isEnemy === false, `Walker #${w.walkerNumber}: isEnemy should be false`);
+      assert(w.isBonded === false, `Walker #${w.walkerNumber}: isBonded should be false`);
+      assert(w.walkingTogether === false, `Walker #${w.walkerNumber}: walkingTogether should be false`);
+      assert(w.lastStoryMile === 0, `Walker #${w.walkerNumber}: lastStoryMile should be 0`);
+      assert(w.lastEncourageMile === 0, `Walker #${w.walkerNumber}: lastEncourageMile should be 0`);
+    }
+  });
+
+  // 12. Relationship tier boundaries
+  check('Relationship tier boundaries: correct at thresholds', () => {
+    const makeWalker = (rel: number, allied = false, bonded = false, enemy = false): WalkerState => ({
+      walkerNumber: 1, alive: true, stamina: 100, speed: 4.0, pain: 0, morale: 100,
+      clarity: 100, warnings: 0, warningTimer: 0, position: 'middle', relationship: rel,
+      behavioralState: 'steady', isAlliedWithPlayer: allied, isEnemy: enemy, isBonded: bonded,
+      allyStrain: 0, conversationFlags: {}, eliminatedAtMile: null, conversationCount: 0,
+      revealedFacts: [], playerActions: [], lastDeclineNarrativeMile: 0,
+      lastStoryMile: 0, lastEncourageMile: 0, walkingTogether: false,
+    });
+
+    assert(getRelationshipTier(makeWalker(-50)) === 'enemy', 'rel -50 should be enemy');
+    assert(getRelationshipTier(makeWalker(-40)) === 'hostile', 'rel -40 should be hostile');
+    assert(getRelationshipTier(makeWalker(-10)) === 'wary', 'rel -10 should be wary');
+    assert(getRelationshipTier(makeWalker(10)) === 'neutral', 'rel 10 should be neutral');
+    assert(getRelationshipTier(makeWalker(30)) === 'friendly', 'rel 30 should be friendly');
+    assert(getRelationshipTier(makeWalker(50)) === 'close', 'rel 50 should be close');
+    assert(getRelationshipTier(makeWalker(60, true)) === 'allied', 'allied should be allied');
+    assert(getRelationshipTier(makeWalker(90, true, true)) === 'bonded', 'bonded should be bonded');
   });
 }
 

@@ -13,6 +13,15 @@ export type CrowdDensity = 'none' | 'sparse' | 'moderate' | 'heavy' | 'massive';
 export type CrowdMood = 'excited' | 'cheering' | 'subdued' | 'uneasy' | 'hostile' | 'surreal';
 export type BehavioralState = 'steady' | 'struggling' | 'talking' | 'breaking_down' | 'eliminated';
 export type AlliancePotential = 'none' | 'low' | 'medium' | 'high';
+export type RelationshipTier = 'enemy' | 'hostile' | 'wary' | 'neutral' | 'friendly' | 'close' | 'allied' | 'bonded';
+
+export type HostileActionType =
+  | 'pace_disruption' | 'psychological_warfare' | 'sleep_attack'
+  | 'crowd_manipulation' | 'supply_interference';
+
+export type PlayerHostileActionType =
+  | 'verbal_taunt' | 'lullaby' | 'isolation' | 'pace_pressure' | 'crowd_turn'
+  | 'trip' | 'steal_supplies';
 export type Screen = 'title' | 'creation' | 'intro' | 'game' | 'dialogue' | 'gameover';
 export type NarrativeType = 'narration' | 'dialogue' | 'warning' | 'elimination' | 'system' | 'thought' | 'crowd' | 'hallucination' | 'event' | 'overheard';
 export type Act = 1 | 2 | 3 | 4;
@@ -28,7 +37,13 @@ export type CrisisType =
   | 'bathroom_emergency'
   | 'hypothermia'
   | 'ally_stumble'
-  | 'stranger_plea';
+  | 'stranger_plea'
+  | 'bonded_grief'
+  | 'enemy_pace_disruption'
+  | 'enemy_psych_warfare'
+  | 'enemy_sleep_attack'
+  | 'enemy_crowd_manipulation'
+  | 'enemy_supply_interference';
 
 // --- Crisis System ---
 
@@ -112,6 +127,8 @@ export interface PlayerState {
   foodCooldown: number;  // game-minutes until food can be requested
   waterCooldown: number; // game-minutes until water can be requested
   alliances: number[];   // walker_numbers of allied NPCs
+  bondedAlly: number | null;   // walker number of bonded ally (max 1)
+  enemies: number[];           // walker numbers of active enemies
   flags: Record<string, boolean>;
   bladder: number;       // 0-100
   bowel: number;         // 0-100
@@ -170,7 +187,8 @@ export type ApproachType =
   | 'offer_alliance'
   | 'crisis_aftermath'
   | 'introduction'
-  | 'proximity';
+  | 'proximity'
+  | 'enemy_confrontation';
 
 export interface ApproachState {
   walkerId: number;
@@ -221,6 +239,8 @@ export interface WalkerState {
   relationship: number;  // -100 to 100 toward player
   behavioralState: BehavioralState;
   isAlliedWithPlayer: boolean;
+  isEnemy: boolean;
+  isBonded: boolean;
   allyStrain: number;    // 0-100, strain from player leaning on this ally
   conversationFlags: Record<string, boolean>;
   eliminatedAtMile: number | null;
@@ -228,6 +248,9 @@ export interface WalkerState {
   revealedFacts: string[];      // facts shared via LLM share_info tool
   playerActions: string[];      // what player has done for this walker
   lastDeclineNarrativeMile: number;  // mile of last decline narrative shown
+  lastStoryMile: number;        // mile of last "tell a story" social action
+  lastEncourageMile: number;    // mile of last "encourage" social action
+  walkingTogether: boolean;     // sustained "walk together" mode
 }
 
 // --- World ---
@@ -372,6 +395,7 @@ export interface GameState {
   approachInProgress: boolean;  // prevents overlapping approach LLM calls
   lastWarningMile: number;      // mile of player's most recent warning (for approach triggers)
   lastCrisisResolveMile: number; // mile of last resolved crisis (for approach triggers)
+  lastEnemyActionMile: number;   // mile of last enemy hostile action (cooldown)
 }
 
 // --- Route Data ---

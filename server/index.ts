@@ -71,8 +71,11 @@ app.post('/api/chat/:walkerId', async (c) => {
     return c.json({ error: 'Missing message, walker, or gameContext' }, 400);
   }
 
-  // Get or create agent for this walker
-  const agent = getOrCreateAgent(walker);
+  // Create request-scoped effects accumulator + tools (closure-bound, no shared state)
+  const { effects, tools } = createEffectsScope();
+
+  // Get or create agent for this walker with scoped tools
+  const agent = getOrCreateAgent(walker, tools);
 
   // Build conversation input with game context
   const contextBlock = buildGameContextBlock(gameContext);
@@ -94,9 +97,6 @@ app.post('/api/chat/:walkerId', async (c) => {
 
   // Record player message in history (will be rolled back on error)
   addToHistory(walkerId, 'user', message);
-
-  // Create request-scoped effects accumulator
-  const effects = createEffectsScope();
 
   // Stream response via SSE
   return new Response(

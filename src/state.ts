@@ -2,7 +2,7 @@
 // The Long Walk — Game State Management
 // ============================================================
 
-import { GameState, PlayerState, WalkerState, WalkerData, WorldState } from './types';
+import { GameState, PlayerState, WalkerState, WalkerData, WorldState, RelationshipTier } from './types';
 import { ALL_WALKERS } from './data/walkers';
 
 export function createDefaultPlayer(): PlayerState {
@@ -30,6 +30,8 @@ export function createDefaultPlayer(): PlayerState {
     foodCooldown: 0,
     waterCooldown: 0,
     alliances: [],
+    bondedAlly: null,
+    enemies: [],
     flags: {},
     bladder: 0,
     bowel: 0,
@@ -72,6 +74,8 @@ export function createWalkerState(data: WalkerData): WalkerState {
     relationship: data.initialRelationship,
     behavioralState: 'steady',
     isAlliedWithPlayer: false,
+    isEnemy: false,
+    isBonded: false,
     allyStrain: 0,
     conversationFlags: {},
     eliminatedAtMile: null,
@@ -79,6 +83,9 @@ export function createWalkerState(data: WalkerData): WalkerState {
     revealedFacts: [],
     playerActions: [],
     lastDeclineNarrativeMile: 0,
+    lastStoryMile: 0,
+    lastEncourageMile: 0,
+    walkingTogether: false,
   };
 }
 
@@ -113,6 +120,7 @@ export function createInitialGameState(): GameState {
     approachInProgress: false,
     lastWarningMile: 0,
     lastCrisisResolveMile: 0,
+    lastEnemyActionMile: 0,
   };
 }
 
@@ -152,6 +160,17 @@ export function resetWalkerDataMap() {
 
 export function getWalkersRemaining(state: GameState): number {
   return state.walkers.filter(w => w.alive).length + (state.player.alive ? 1 : 0);
+}
+
+export function getRelationshipTier(w: WalkerState): RelationshipTier {
+  if (w.isBonded) return 'bonded';
+  if (w.isAlliedWithPlayer) return 'allied';
+  if (w.relationship >= 50) return 'close';
+  if (w.relationship >= 30) return 'friendly';
+  if (w.relationship >= 10) return 'neutral';
+  if (w.relationship >= -10) return 'wary';
+  if (w.relationship >= -40) return 'hostile';
+  return 'enemy';
 }
 
 export function addNarrative(state: GameState, text: string, type: import('./types').NarrativeType) {

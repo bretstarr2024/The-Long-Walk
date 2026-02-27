@@ -46,6 +46,8 @@ export interface GameContext {
   revealedFacts?: string[];
   playerActions?: string[];
   isAllied?: boolean;
+  isBonded?: boolean;
+  isEnemy?: boolean;
   allyStrain?: number;
 }
 
@@ -98,7 +100,16 @@ export function buildGameContextBlock(ctx: GameContext, skipWalkerState = false)
       `## Your State`,
       `Warnings: ${ctx.walkerWarnings}/3 | Morale: ${ctx.walkerMorale}% | Stamina: ${ctx.walkerStamina}%`,
       `Behavioral state: ${ctx.walkerBehavioralState}`,
-      `Relationship with player: ${ctx.walkerRelationship} (${ctx.walkerRelationship > 40 ? 'friendly' : ctx.walkerRelationship > 10 ? 'curious' : ctx.walkerRelationship < -10 ? 'hostile' : 'neutral'})`,
+      `Relationship with player: ${ctx.walkerRelationship} (${
+        ctx.isEnemy ? 'ENEMY' :
+        ctx.isBonded ? 'BONDED' :
+        ctx.isAllied ? 'allied' :
+        ctx.walkerRelationship >= 50 ? 'close' :
+        ctx.walkerRelationship >= 30 ? 'friendly' :
+        ctx.walkerRelationship >= 10 ? 'neutral' :
+        ctx.walkerRelationship >= -10 ? 'wary' :
+        ctx.walkerRelationship >= -40 ? 'hostile' : 'enemy'
+      })`,
     );
   }
 
@@ -119,15 +130,25 @@ export function buildGameContextBlock(ctx: GameContext, skipWalkerState = false)
     if (ctx.arcPromptHint) {
       lines.push(`Hint: ${ctx.arcPromptHint}`);
     }
-    if (ctx.isAllied) {
-      lines.push(`Alliance: Yes${ctx.allyStrain && ctx.allyStrain > 30 ? ' (strained — they lean on you heavily)' : ''}`);
-    }
     if (ctx.revealedFacts && ctx.revealedFacts.length > 0) {
       lines.push(`What you've shared: ${ctx.revealedFacts.join(', ')}`);
     }
     if (ctx.playerActions && ctx.playerActions.length > 0) {
       lines.push(`What they've done for you: ${ctx.playerActions.join(', ')}`);
     }
+  }
+
+  // Relationship context — outside arc guard so it works for all Tier 1/2 walkers
+  if (ctx.isBonded) {
+    lines.push('', '## BONDED ALLY',
+      'Alliance: BONDED — win together or die together. This person means everything to you.');
+  } else if (ctx.isAllied) {
+    lines.push('', `## ALLIED`,
+      `Alliance: Yes${ctx.allyStrain && ctx.allyStrain > 30 ? ' (strained — they lean on you heavily)' : ''}`);
+  } else if (ctx.isEnemy) {
+    lines.push('', '## ENEMY RELATIONSHIP',
+      'You HATE this player. Your words should cut. Think Barkovitch — needling, finding weak spots, psychological warfare.',
+      'Every response should carry an edge. You want to see them fail.');
   }
 
   return lines.join('\n');

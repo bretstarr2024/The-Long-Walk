@@ -481,11 +481,276 @@ const CRISIS_DEFS: CrisisDefinition[] = [
       };
     },
   },
+  // 11. BONDED GRIEF (bonded ally eliminated — triggered from engine, not random)
+  {
+    type: 'bonded_grief',
+    canTrigger: () => false, // Never randomly — triggered by eliminateWalker
+    chance: () => 0,
+    build: (s) => {
+      const options: CrisisOption[] = [
+        {
+          id: 'rage', label: 'Rage', description: '+15 morale now, crash later, +10 pain',
+          effects: { morale: 15, pain: 10, speedOverride: 5.5, speedDuration: 10 }, requiresAlly: false,
+          narrative: 'Something breaks inside you. Not sadness. Fury. You walk faster. You walk like you want to kill the road.',
+        },
+        {
+          id: 'numb', label: 'Go numb', description: '-20 clarity, no morale loss',
+          effects: { clarity: -20 }, requiresAlly: false,
+          narrative: 'You stop feeling. The road is just a road. The walk is just walking. Nothing means anything.',
+        },
+        {
+          id: 'honor', label: 'Honor them', description: '-10 morale now, +5 morale/mile for 10 miles',
+          effects: { morale: -10 }, requiresAlly: false,
+          narrative: 'You whisper their name. You walk for them now. Every step is a promise you intend to keep.',
+        },
+      ];
+      return {
+        type: 'bonded_grief', title: 'THEY\'RE GONE',
+        description: 'The gunshot. The silence after. They\'re gone. The road doesn\'t care.',
+        options, timeLimit: 30, timeRemaining: 30,
+        defaultEffects: { morale: -25, clarity: -15 },
+        defaultNarrative: 'You walk. You don\'t speak. You don\'t look at anyone. You just walk.',
+      };
+    },
+  },
+
+  // 12. ENEMY: PACE DISRUPTION (NPC changes speed near you to throw you off)
+  {
+    type: 'enemy_pace_disruption',
+    canTrigger: (s) => {
+      if (s.world.milesWalked - s.lastEnemyActionMile < 5) return false;
+      return s.player.enemies.some(num => {
+        const w = s.walkers.find(ws => ws.walkerNumber === num);
+        return w && w.alive && w.position === s.player.position;
+      });
+    },
+    chance: () => 0.12,
+    build: (s) => {
+      const enemy = s.walkers.find(w =>
+        w.alive && w.isEnemy && w.position === s.player.position
+      );
+      const eName = enemy ? (getWalkerData(s, enemy.walkerNumber)?.name || `Walker #${enemy.walkerNumber}`) : 'Someone';
+      const options: CrisisOption[] = [
+        {
+          id: 'grit', label: 'Grit your teeth', description: '+5 pain, keep pace',
+          effects: { pain: 5 }, requiresAlly: false,
+          narrative: `${eName} speeds up, slows down, speeds up. Trying to drag you off rhythm. You lock your jaw and hold your pace.`,
+        },
+        {
+          id: 'confront', label: 'Confront them', description: '-5 morale, they back off',
+          effects: { morale: -5 }, requiresAlly: false,
+          narrative: `"Cut it out." ${eName} smirks. "Just walking." But they drift away.`,
+        },
+        {
+          id: 'move_away', label: 'Move away', description: '-5 stamina, avoid them',
+          effects: { stamina: -5 }, requiresAlly: false,
+          narrative: `You change your line on the road. Put bodies between you and ${eName}. It costs energy you don't have.`,
+        },
+      ];
+      return {
+        type: 'enemy_pace_disruption', title: 'PACE DISRUPTION',
+        description: `${eName} is walking right next to you, changing speed erratically, trying to throw off your rhythm.`,
+        options, timeLimit: 20, timeRemaining: 20,
+        defaultEffects: { morale: -8, pain: 3 },
+        defaultNarrative: `${eName}'s pace games get under your skin. Your rhythm breaks. You stumble.`,
+      };
+    },
+  },
+
+  // 13. ENEMY: PSYCHOLOGICAL WARFARE (taunts, brings up dead friends)
+  {
+    type: 'enemy_psych_warfare',
+    canTrigger: (s) => {
+      if (s.world.milesWalked - s.lastEnemyActionMile < 5) return false;
+      return s.player.enemies.some(num => {
+        const w = s.walkers.find(ws => ws.walkerNumber === num);
+        return w && w.alive && w.position === s.player.position;
+      });
+    },
+    chance: () => 0.15,
+    build: (s) => {
+      const enemy = s.walkers.find(w =>
+        w.alive && w.isEnemy && w.position === s.player.position
+      );
+      const eNum = enemy?.walkerNumber || 0;
+      const eName = enemy ? (getWalkerData(s, eNum)?.name || `Walker #${eNum}`) : 'Someone';
+      const options: CrisisOption[] = [
+        {
+          id: 'ignore', label: 'Ignore them', description: '-8 morale',
+          effects: { morale: -8 }, requiresAlly: false,
+          narrative: `${eName}'s words are poison. You don't respond. That doesn't mean they don't land.`,
+        },
+        {
+          id: 'fire_back', label: 'Fire back', description: '-5 morale, -3 their morale',
+          effects: { morale: -5, allyMorale: -3 }, requiresAlly: false,
+          narrative: `You say something back. Something ugly. ${eName} flinches. You both lose something.`,
+        },
+        {
+          id: 'walk_away', label: 'Walk away', description: '-5 stamina',
+          effects: { stamina: -5 }, requiresAlly: false,
+          narrative: `You pick up your pace. Put distance between you. The words follow you for a while.`,
+        },
+      ];
+      return {
+        type: 'enemy_psych_warfare', title: 'PSYCHOLOGICAL WARFARE',
+        description: `${eName} is talking at you. About the people who've already been shot. About how you'll be next. About things they've noticed. Weak spots.`,
+        options, timeLimit: 20, timeRemaining: 20,
+        targetWalker: eNum,
+        defaultEffects: { morale: -12 },
+        defaultNarrative: `${eName}'s words drill into you. You can't shut them out. The morale drains like water from a cracked cup.`,
+      };
+    },
+  },
+
+  // 14. ENEMY: SLEEP ATTACK (soothing monotone when you're tired)
+  {
+    type: 'enemy_sleep_attack',
+    canTrigger: (s) => {
+      if (s.world.milesWalked - s.lastEnemyActionMile < 5) return false;
+      if (s.player.clarity > 40) return false;
+      return s.player.enemies.some(num => {
+        const w = s.walkers.find(ws => ws.walkerNumber === num);
+        return w && w.alive && w.position === s.player.position;
+      });
+    },
+    chance: () => 0.20,
+    build: (s) => {
+      const enemy = s.walkers.find(w =>
+        w.alive && w.isEnemy && w.position === s.player.position
+      );
+      const eName = enemy ? (getWalkerData(s, enemy.walkerNumber)?.name || `Walker #${enemy.walkerNumber}`) : 'Someone';
+      const allyNum = getAllyNearby(s);
+      const allyName = allyNum ? getAllyName(s, allyNum) : '';
+      const options: CrisisOption[] = [
+        {
+          id: 'snap', label: 'Snap awake', description: '-5 stamina, +10 clarity',
+          effects: { stamina: -5, clarity: 10 }, requiresAlly: false,
+          narrative: `You jerk your head up. ${eName} is watching you with satisfaction. You burn adrenaline you can't afford.`,
+        },
+        {
+          id: 'engage', label: 'Engage in conversation', description: '+5 clarity, -3 morale',
+          effects: { clarity: 5, morale: -3 }, requiresAlly: false,
+          narrative: `You force yourself to talk back. Argument is better than sleep. ${eName} wasn't expecting that.`,
+        },
+        {
+          id: 'ally_help', label: `${allyName} wakes you`, description: 'Ally handles it',
+          effects: { clarity: 8, allyStamina: -2, allyStrain: 8 }, requiresAlly: true,
+          narrative: `${allyName} shoves your shoulder. "Hey! Don't listen to that." You blink. ${eName} scowls and drifts away.`,
+        },
+      ];
+      return {
+        type: 'enemy_sleep_attack', title: 'LULLABY',
+        description: `${eName} is talking in a low, soothing monotone. About sleep. About rest. About how good it would feel to just close your eyes...`,
+        options, timeLimit: 15, timeRemaining: 15,
+        defaultEffects: { clarity: -15, speedOverride: 3.0, speedDuration: 3, warningRisk: 0.4 },
+        defaultNarrative: `Your eyes close. ${eName}'s voice is so gentle. The road blurs. The soldier's voice is distant...`,
+      };
+    },
+  },
+
+  // 15. ENEMY: CROWD MANIPULATION (turns nearby walkers against you)
+  {
+    type: 'enemy_crowd_manipulation',
+    canTrigger: (s) => {
+      if (s.world.milesWalked - s.lastEnemyActionMile < 5) return false;
+      return s.player.enemies.some(num => {
+        const w = s.walkers.find(ws => ws.walkerNumber === num);
+        return w && w.alive && w.position === s.player.position;
+      });
+    },
+    chance: () => 0.08,
+    build: (s) => {
+      const enemy = s.walkers.find(w =>
+        w.alive && w.isEnemy && w.position === s.player.position
+      );
+      const eName = enemy ? (getWalkerData(s, enemy.walkerNumber)?.name || `Walker #${enemy.walkerNumber}`) : 'Someone';
+      const options: CrisisOption[] = [
+        {
+          id: 'endure', label: 'Endure it', description: '-5 morale, fewer approaches',
+          effects: { morale: -5 }, requiresAlly: false,
+          narrative: `The others look at you differently now. ${eName} has been talking. Spreading poison. You walk alone in a crowd.`,
+        },
+        {
+          id: 'confront', label: 'Confront publicly', description: '50/50: +5 morale or -8 morale',
+          effects: {}, requiresAlly: false,
+          narrative: '', // Set dynamically in resolution
+        },
+        {
+          id: 'ignore', label: 'Ignore it entirely', description: '-3 morale',
+          effects: { morale: -3 }, requiresAlly: false,
+          narrative: `You pretend not to notice. The whispers continue. You keep your eyes on the road.`,
+        },
+      ];
+      return {
+        type: 'enemy_crowd_manipulation', title: 'CROWD MANIPULATION',
+        description: `${eName} has been talking to the other walkers about you. You can feel the shifting glances. The isolation.`,
+        options, timeLimit: 25, timeRemaining: 25,
+        defaultEffects: { morale: -8 },
+        defaultNarrative: `${eName}'s social warfare works. The other walkers avoid you. The loneliness is worse than any cramp.`,
+      };
+    },
+  },
+
+  // 16. ENEMY: SUPPLY INTERFERENCE (knocks your belt pack)
+  {
+    type: 'enemy_supply_interference',
+    canTrigger: (s) => {
+      if (s.world.milesWalked - s.lastEnemyActionMile < 5) return false;
+      return s.player.enemies.some(num => {
+        const w = s.walkers.find(ws => ws.walkerNumber === num);
+        // Only trigger if enemy has < 2 warnings (they risk a warning too)
+        return w && w.alive && w.position === s.player.position && w.warnings < 2;
+      });
+    },
+    chance: () => 0.05,
+    build: (s) => {
+      const enemy = s.walkers.find(w =>
+        w.alive && w.isEnemy && w.position === s.player.position && w.warnings < 2
+      );
+      const eNum = enemy?.walkerNumber || 0;
+      const eName = enemy ? (getWalkerData(s, eNum)?.name || `Walker #${eNum}`) : 'Someone';
+      const options: CrisisOption[] = [
+        {
+          id: 'absorb', label: 'Absorb the hit', description: '-20 hydration',
+          effects: { hydration: -20 }, requiresAlly: false,
+          narrative: `${eName} bumps you hard. Your canteen goes flying. Water spills on the asphalt. You watch it soak in.`,
+        },
+        {
+          id: 'retaliate', label: 'Retaliate', description: '40% chance: 1 warning to you, 1 warning to them',
+          effects: {}, requiresAlly: false,
+          narrative: '', // Set dynamically
+        },
+        {
+          id: 'report', label: 'Report to the soldiers', description: '-5 morale (snitching), they get 1 warning',
+          effects: { morale: -5 }, requiresAlly: false,
+          narrative: `You catch a soldier's eye. Point at ${eName}. The soldier speaks into the radio. You feel like a rat. But ${eName} gets what they deserve.`,
+        },
+      ];
+      return {
+        type: 'enemy_supply_interference', title: 'SUPPLY INTERFERENCE',
+        description: `${eName} is walking too close. Too aggressive. They "accidentally" slam into your shoulder, going for your belt pack.`,
+        options, timeLimit: 15, timeRemaining: 15,
+        targetWalker: eNum,
+        defaultEffects: { hydration: -20, morale: -5 },
+        defaultNarrative: `${eName} knocks your canteen loose. You scramble but the water's gone. They smile.`,
+      };
+    },
+  },
 ];
 
 // ============================================================
 // BLADDER SYSTEM
 // ============================================================
+
+/** Trigger bonded grief crisis externally (from eliminateWalker in engine.ts) */
+export function triggerBondedGriefCrisis(state: GameState) {
+  const def = CRISIS_DEFS.find(d => d.type === 'bonded_grief');
+  if (!def) return;
+  state.player.activeCrisis = def.build(state);
+  state.player.lastCrisisMile = state.world.milesWalked;
+  state.gameSpeed = 1;
+  addNarrative(state, `⚠ ${state.player.activeCrisis.title}`, 'event');
+}
 
 export function updateBladder(state: GameState, gameMinutes: number) {
   const p = state.player;
@@ -641,6 +906,56 @@ export function resolveCrisis(state: GameState, optionId: string) {
   // Special: bathroom hold doesn't reset bladder
   if (crisis.type === 'bathroom_emergency' && optionId === 'hold') {
     // bladder stays at 100, will re-trigger in a few miles
+  }
+  // Special: bonded grief — honor has delayed morale recovery (via temp effect)
+  if (crisis.type === 'bonded_grief' && optionId === 'honor') {
+    state.player.tempEffects.push({ type: 'morale_delayed', value: 15, remaining: 60 });
+  }
+  // Special: bonded grief — rage has delayed crash
+  if (crisis.type === 'bonded_grief' && optionId === 'rage') {
+    state.player.tempEffects.push({ type: 'morale_delayed', value: -20, remaining: 30 });
+  }
+  // Special: crowd manipulation — confront is 50/50
+  if (crisis.type === 'enemy_crowd_manipulation' && optionId === 'confront') {
+    if (Math.random() < 0.5) {
+      state.player.morale = Math.min(100, state.player.morale + 5);
+      addNarrative(state, 'You call them out in front of everyone. The other walkers see the truth. Respect.', 'narration');
+    } else {
+      state.player.morale = Math.max(0, state.player.morale - 8);
+      addNarrative(state, 'You confront them. It backfires. You look desperate. The isolation deepens.', 'narration');
+    }
+  }
+  // Special: supply interference — retaliate
+  if (crisis.type === 'enemy_supply_interference' && optionId === 'retaliate') {
+    const enemy = crisis.targetWalker ? state.walkers.find(w => w.walkerNumber === crisis.targetWalker) : null;
+    if (enemy && enemy.warnings < 2) {
+      enemy.warnings = Math.min(2, enemy.warnings + 1);
+      const eName = getWalkerData(state, enemy.walkerNumber)?.name || `Walker #${enemy.walkerNumber}`;
+      addNarrative(state, `You shove ${eName} back. Hard. Both of you stumble. The soldiers notice.`, 'narration');
+    }
+    if (Math.random() < 0.4 && state.player.warnings < 2) {
+      state.player.warnings++;
+      state.player.lastWarningTime = state.world.hoursElapsed;
+      state.player.slowAccum = 0;
+      state.lastWarningMile = state.world.milesWalked;
+      const warnText = state.player.warnings === 1
+        ? '"Warning! Warning 100!"'
+        : '"Warning! Second warning, 100!"';
+      addNarrative(state, warnText, 'warning');
+    }
+  }
+  // Special: supply interference — report gives enemy a warning
+  if (crisis.type === 'enemy_supply_interference' && optionId === 'report') {
+    const enemy = crisis.targetWalker ? state.walkers.find(w => w.walkerNumber === crisis.targetWalker) : null;
+    if (enemy && enemy.warnings < 2) {
+      enemy.warnings = Math.min(2, enemy.warnings + 1);
+    }
+  }
+  // Track enemy action mile for cooldown
+  if (crisis.type === 'enemy_pace_disruption' || crisis.type === 'enemy_psych_warfare' ||
+      crisis.type === 'enemy_sleep_attack' || crisis.type === 'enemy_crowd_manipulation' ||
+      crisis.type === 'enemy_supply_interference') {
+    state.lastEnemyActionMile = state.world.milesWalked;
   }
 
   state.player.activeCrisis = null;

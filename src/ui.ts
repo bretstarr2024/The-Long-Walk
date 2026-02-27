@@ -3,8 +3,8 @@
 // ============================================================
 
 import { GameState, PlayerState, WalkerState, PackPosition, Reason } from './types';
-import { getNearbyWalkers, getWalkerData, getWalkersRemaining, addNarrative } from './state';
-import { setPlayerSpeed, setPlayerEffort, setPlayerPosition, requestFood, requestWater, shareFood, shareWater, playerPee, playerPoop } from './engine';
+import { getNearbyWalkers, getWalkerData, getWalkersRemaining, getRelationshipTier, addNarrative } from './state';
+import { setPlayerSpeed, setPlayerEffort, setPlayerPosition, requestFood, requestWater, shareFood, shareWater, playerPee, playerPoop, formAlliance, breakAlliance, formBond } from './engine';
 import { startDialogue, selectDialogueOption, closeDialogue } from './dialogue';
 import { getEndingText, getGameStats, EndingType } from './narrative';
 import { getRouteSegment } from './data/route';
@@ -142,6 +142,10 @@ function handleAction(action: string, state: GameState) {
     case 'observe': handleObserve(state); break;
     case 'think': handleThink(state); break;
     case 'pause': state.isPaused = !state.isPaused; break;
+    case 'toggle-pause-chat':
+      state.isPaused = !state.isPaused;
+      if (state.isPaused) { pausedFromChat = true; } else { pausedFromChat = false; }
+      break;
     case 'mute': toggleMute(); cachedControlsHtml = ''; break;
     case 'speed-1': state.gameSpeed = 1; break;
     case 'speed-2': state.gameSpeed = 2; break;
@@ -158,6 +162,24 @@ function handleAction(action: string, state: GameState) {
     case 'approach-ignore': handleApproachIgnore(state); break;
     case 'dossier-talk': handleDossierTalk(state); break;
     case 'dossier-close': activeDossierWalker = null; cachedActionsHtml = ''; break;
+    // Social actions (from chat card)
+    case 'chat-share-food': handleChatShareFood(state); break;
+    case 'chat-share-water': handleChatShareWater(state); break;
+    case 'chat-tell-story': handleChatTellStory(state); break;
+    case 'chat-encourage': handleChatEncourage(state); break;
+    case 'chat-walk-together': handleChatWalkTogether(state); break;
+    // Hostile actions (from chat card, enemy only)
+    case 'hostile-taunt': handleHostileAction(state, 'verbal_taunt'); break;
+    case 'hostile-lullaby': handleHostileAction(state, 'lullaby'); break;
+    case 'hostile-isolation': handleHostileAction(state, 'isolation'); break;
+    case 'hostile-pace': handleHostileAction(state, 'pace_pressure'); break;
+    case 'hostile-crowd': handleHostileAction(state, 'crowd_turn'); break;
+    case 'hostile-trip': handleHostileAction(state, 'trip'); break;
+    case 'hostile-steal': handleHostileAction(state, 'steal_supplies'); break;
+    // Alliance actions (from chat card)
+    case 'propose-alliance': handleProposeAlliance(state); break;
+    case 'propose-bond': handleProposeBond(state); break;
+    case 'break-alliance': handleBreakAlliance(state); break;
   }
 }
 
@@ -179,6 +201,228 @@ function handleShareFood(state: GameState) {
 function handleShareWater(state: GameState) {
   shareWater(state);
   cachedActionsHtml = '';
+}
+
+// --- Chat Card Social Actions ---
+
+function getChatWalker(state: GameState): WalkerState | undefined {
+  if (!state.llmDialogue) return undefined;
+  return state.walkers.find(ws => ws.walkerNumber === state.llmDialogue!.walkerId);
+}
+
+function handleChatShareFood(state: GameState) {
+  const w = getChatWalker(state);
+  if (!w || !w.alive || state.player.foodCooldown > 0) return;
+  state.player.foodCooldown = 30;
+  w.stamina = Math.min(100, w.stamina + 8);
+  w.morale = Math.min(100, w.morale + 5);
+  w.relationship = Math.min(100, w.relationship + 10);
+  state.player.morale = Math.min(100, state.player.morale + 5);
+  const data = getWalkerData(state, w.walkerNumber);
+  const name = data?.name || `Walker #${w.walkerNumber}`;
+  addNarrative(state, `You hand your food concentrate to ${name}. They eat it without a word. You won't eat for thirty minutes.`, 'narration');
+  w.playerActions.push(`Shared food at mile ${Math.round(state.world.milesWalked)}`);
+  cachedSocialActionsHtml = '';
+}
+
+function handleChatShareWater(state: GameState) {
+  const w = getChatWalker(state);
+  if (!w || !w.alive || state.player.waterCooldown > 0) return;
+  state.player.waterCooldown = 15;
+  w.stamina = Math.min(100, w.stamina + 5);
+  w.morale = Math.min(100, w.morale + 3);
+  w.relationship = Math.min(100, w.relationship + 8);
+  state.player.morale = Math.min(100, state.player.morale + 3);
+  const data = getWalkerData(state, w.walkerNumber);
+  const name = data?.name || `Walker #${w.walkerNumber}`;
+  addNarrative(state, `You pass your canteen to ${name}. They drink deep. You'll go without for fifteen minutes.`, 'narration');
+  w.playerActions.push(`Shared water at mile ${Math.round(state.world.milesWalked)}`);
+  cachedSocialActionsHtml = '';
+}
+
+function handleChatTellStory(state: GameState) {
+  const w = getChatWalker(state);
+  if (!w || !w.alive) return;
+  if (w.relationship < 10) return;
+  if (state.world.milesWalked - w.lastStoryMile < 10) return;
+  w.lastStoryMile = state.world.milesWalked;
+  w.morale = Math.min(100, w.morale + 5);
+  w.relationship = Math.min(100, w.relationship + 3);
+  state.player.morale = Math.min(100, state.player.morale + 3);
+  const data = getWalkerData(state, w.walkerNumber);
+  const name = data?.name || `Walker #${w.walkerNumber}`;
+  const stories = [
+    `You tell ${name} about your life back home. For a moment, the road feels shorter.`,
+    `You share a memory — something funny from school. ${name} actually laughs.`,
+    `You talk about ${state.player.prize}. ${name} listens carefully. They understand.`,
+    `You tell ${name} a story your father used to tell. The words come easy for once.`,
+  ];
+  addNarrative(state, stories[Math.floor(Math.random() * stories.length)], 'narration');
+  w.playerActions.push(`Told a story at mile ${Math.round(state.world.milesWalked)}`);
+  cachedSocialActionsHtml = '';
+}
+
+function handleChatEncourage(state: GameState) {
+  const w = getChatWalker(state);
+  if (!w || !w.alive) return;
+  if (state.world.milesWalked - w.lastEncourageMile < 5) return;
+  w.lastEncourageMile = state.world.milesWalked;
+  w.morale = Math.min(100, w.morale + 3);
+  state.player.morale = Math.min(100, state.player.morale + 1);
+  const data = getWalkerData(state, w.walkerNumber);
+  const name = data?.name || `Walker #${w.walkerNumber}`;
+  const encouragements = [
+    `"Keep going." ${name} nods. Sometimes that's enough.`,
+    `"You've got this." ${name} doesn't respond, but their step steadies.`,
+    `"One foot in front of the other." ${name} manages a thin smile.`,
+  ];
+  addNarrative(state, encouragements[Math.floor(Math.random() * encouragements.length)], 'narration');
+  cachedSocialActionsHtml = '';
+}
+
+function handleChatWalkTogether(state: GameState) {
+  const w = getChatWalker(state);
+  if (!w || !w.alive) return;
+  if (w.relationship < 30 || w.position !== state.player.position) return;
+  w.walkingTogether = !w.walkingTogether;
+  const data = getWalkerData(state, w.walkerNumber);
+  const name = data?.name || `Walker #${w.walkerNumber}`;
+  if (w.walkingTogether) {
+    addNarrative(state, `You fall into step beside ${name}. Walking together.`, 'narration');
+  } else {
+    addNarrative(state, `You drift apart from ${name}. Back to walking alone.`, 'narration');
+  }
+  cachedSocialActionsHtml = '';
+}
+
+// --- Hostile Actions (Player → Enemy NPC) ---
+
+function handleHostileAction(state: GameState, actionType: import('./types').PlayerHostileActionType) {
+  const w = getChatWalker(state);
+  if (!w || !w.alive || !w.isEnemy) return;
+  const data = getWalkerData(state, w.walkerNumber);
+  const name = data?.name || `Walker #${w.walkerNumber}`;
+  const p = state.player;
+
+  switch (actionType) {
+    case 'verbal_taunt':
+      w.morale = Math.max(0, w.morale - 8);
+      if (w.relationship > -60) w.relationship = Math.max(-100, w.relationship - 5);
+      addNarrative(state, `You mock ${name}. The words are sharp. Ugly. They land.`, 'narration');
+      break;
+
+    case 'lullaby':
+      w.clarity = Math.max(0, w.clarity - 10);
+      addNarrative(state, `You speak low and slow to ${name}. Soothing. Rhythmic. Their eyes get heavy.`, 'narration');
+      break;
+
+    case 'isolation':
+      if (p.alliances.length === 0) {
+        addNarrative(state, `You have no allies to turn against them.`, 'thought');
+        return;
+      }
+      w.morale = Math.max(0, w.morale - 10);
+      addNarrative(state, `You and your allies close ranks. ${name} is on the outside now.`, 'narration');
+      break;
+
+    case 'pace_pressure':
+      w.stamina = Math.max(0, w.stamina - 5);
+      p.effort = Math.min(100, p.effort + 10);
+      p.tempEffects.push({ type: 'speed_override', value: 5.5, remaining: 2 });
+      addNarrative(state, `You speed up, forcing ${name} to match. It costs you both.`, 'narration');
+      break;
+
+    case 'crowd_turn':
+      w.morale = Math.max(0, w.morale - 5);
+      addNarrative(state, `You make sure the others see what ${name} really is. The pack shifts.`, 'narration');
+      break;
+
+    case 'trip': {
+      if (w.warnings >= 2) {
+        addNarrative(state, `${name} has two warnings. You won't be the one to end it. Not like that.`, 'thought');
+        return;
+      }
+      w.warnings++;
+      w.speed = Math.min(w.speed, 3.5);
+      addNarrative(state, `"Warning! ${w.warnings === 1 ? 'Warning' : 'Second warning,'} ${w.walkerNumber}!"`, 'warning');
+      // Player risks warning (60% chance)
+      if (Math.random() < 0.6 && p.warnings < 2) {
+        p.warnings++;
+        p.lastWarningTime = state.world.hoursElapsed;
+        p.slowAccum = 0;
+        state.lastWarningMile = state.world.milesWalked;
+        addNarrative(state, `The soldier sees you too. "Warning! ${p.warnings === 1 ? 'Warning' : 'Second warning,'} ${p.walkerNumber}!"`, 'warning');
+        addNarrative(state, `Your foot catches ${name}'s ankle. They stumble. So do you.`, 'narration');
+      } else {
+        addNarrative(state, `Your foot catches ${name}'s ankle. They stumble. You keep walking.`, 'narration');
+      }
+      break;
+    }
+
+    case 'steal_supplies': {
+      if (w.warnings >= 2) {
+        addNarrative(state, `${name} has two warnings already. Too risky.`, 'thought');
+        return;
+      }
+      p.hydration = Math.min(100, p.hydration + 20);
+      w.warnings++;
+      addNarrative(state, `"Warning! ${w.warnings === 1 ? 'Warning' : 'Second warning,'} ${w.walkerNumber}!"`, 'warning');
+      if (Math.random() < 0.4 && p.warnings < 2) {
+        p.warnings++;
+        p.lastWarningTime = state.world.hoursElapsed;
+        p.slowAccum = 0;
+        state.lastWarningMile = state.world.milesWalked;
+        addNarrative(state, `"Warning! ${p.warnings === 1 ? 'Warning' : 'Second warning,'} ${p.walkerNumber}!"`, 'warning');
+        addNarrative(state, `You grab from ${name}'s belt. They lunge. The soldiers see both of you.`, 'narration');
+      } else {
+        addNarrative(state, `You grab from ${name}'s belt. They're too slow to stop you.`, 'narration');
+      }
+      break;
+    }
+  }
+  cachedSocialActionsHtml = '';
+}
+
+// --- Alliance Actions (from chat card) ---
+
+function handleProposeAlliance(state: GameState) {
+  const w = getChatWalker(state);
+  if (!w || !w.alive || w.isAlliedWithPlayer || w.isEnemy) return;
+  if (state.player.alliances.length >= 2) return;
+
+  const data = getWalkerData(state, w.walkerNumber);
+  const name = data?.name || `Walker #${w.walkerNumber}`;
+
+  if (w.relationship < 50) {
+    // Too soon — refused with relationship penalty
+    w.relationship = Math.max(-100, w.relationship - 15);
+    addNarrative(state, `You ask ${name} to walk together. An alliance. They look away. "I don't think so. Not yet." The rejection stings.`, 'narration');
+  } else if (w.relationship < 60 && Math.random() < 0.5) {
+    // Borderline — 50% chance refused
+    w.relationship = Math.max(-100, w.relationship - 5);
+    addNarrative(state, `You propose an alliance to ${name}. They hesitate. "Maybe later." It wasn't a no, but it wasn't a yes.`, 'narration');
+  } else {
+    // Accepted
+    formAlliance(state, w.walkerNumber);
+  }
+  cachedSocialActionsHtml = '';
+}
+
+function handleProposeBond(state: GameState) {
+  const w = getChatWalker(state);
+  if (!w || !w.alive || !w.isAlliedWithPlayer || w.isBonded) return;
+  if (state.player.bondedAlly !== null) return;
+
+  formBond(state, w.walkerNumber);
+  cachedSocialActionsHtml = '';
+}
+
+function handleBreakAlliance(state: GameState) {
+  const w = getChatWalker(state);
+  if (!w || !w.isAlliedWithPlayer || w.isBonded) return;
+
+  breakAlliance(state, w.walkerNumber);
+  cachedSocialActionsHtml = '';
 }
 
 function changePosition(state: GameState, pos: PackPosition) {
@@ -262,6 +506,11 @@ export function closeLLMDialogue(state: GameState) {
   const name = dlg.walkerName;
   state.llmDialogue = null;
   addNarrative(state, `You stop talking to ${name} and focus on walking.`, 'narration');
+  // Auto-resume if game was paused via "Stop the World" button
+  if (pausedFromChat && !state.activeScene) {
+    state.isPaused = false;
+    pausedFromChat = false;
+  }
 }
 
 function buildGameContext(state: GameState, walkerNum: number): GameContextForAgent {
@@ -332,6 +581,8 @@ function buildGameContext(state: GameState, walkerNum: number): GameContextForAg
     revealedFacts: w.revealedFacts.length > 0 ? w.revealedFacts : undefined,
     playerActions: w.playerActions.length > 0 ? w.playerActions : undefined,
     isAllied: w.isAlliedWithPlayer || undefined,
+    isBonded: w.isBonded || undefined,
+    isEnemy: w.isEnemy || undefined,
     allyStrain: w.isAlliedWithPlayer ? w.allyStrain : undefined,
   };
 }
@@ -429,6 +680,18 @@ function applyGameEffect(state: GameState, effect: { effectType: string; walkerI
       if (w && effect.delta) {
         w.relationship = Math.max(-100, Math.min(100, w.relationship + effect.delta));
         console.log(`[Effect] Relationship ${effect.delta > 0 ? '+' : ''}${effect.delta} → ${w.relationship}`);
+        // Relationship improvement → morale/stamina bonuses
+        if (effect.delta > 0) {
+          const moraleBump = effect.delta * 2;
+          state.player.morale = Math.min(100, state.player.morale + moraleBump);
+          w.morale = Math.min(100, w.morale + moraleBump);
+          if (effect.delta >= 5) {
+            state.player.stamina = Math.min(100, state.player.stamina + 1);
+          }
+        } else {
+          // Relationship worsening → morale drain (player only)
+          state.player.morale = Math.max(0, state.player.morale + effect.delta);
+        }
       }
       break;
     case 'morale':
@@ -1012,12 +1275,8 @@ function updateWalkersPanel(state: GameState) {
   const items = nearby.map(w => {
     const data = getWalkerData(state, w.walkerNumber);
     if (!data) return '';
-    const dispLabel = w.isAlliedWithPlayer ? 'ally'
-      : w.relationship > 40 ? 'friendly'
-      : w.relationship > 10 ? 'curious'
-      : w.relationship < -10 ? 'hostile'
-      : w.behavioralState === 'struggling' ? 'struggling'
-      : 'neutral';
+    const tier = getRelationshipTier(w);
+    const dispLabel = w.behavioralState === 'struggling' && tier === 'wary' ? 'struggling' : tier;
     const warnings = w.warnings > 0 ? `<span class="walker-warnings">${'!'.repeat(w.warnings)}</span>` : '';
     return `
       <div class="walker-item" data-walker="${w.walkerNumber}">
@@ -1048,11 +1307,7 @@ function renderDossier(state: GameState, walkerNum: number): string {
   const data = getWalkerData(state, walkerNum);
   if (!w || !data) return '<div class="panel-title">Unknown Walker</div>';
 
-  const relLabel = w.isAlliedWithPlayer ? 'Allied'
-    : w.relationship > 40 ? 'Friendly'
-    : w.relationship > 10 ? 'Curious'
-    : w.relationship < -10 ? 'Hostile'
-    : 'Neutral';
+  const relLabel = getRelationshipTier(w);
   const statusLabel = !w.alive ? 'Eliminated'
     : w.behavioralState === 'breaking_down' ? 'Breaking Down'
     : w.behavioralState === 'struggling' ? 'Struggling'
@@ -1118,10 +1373,7 @@ function updateActionsPanel(state: GameState) {
     const items = nearby.map(w => {
       const d = getWalkerData(state, w.walkerNumber);
       if (!d) return '';
-      const rel = w.relationship > 40 ? 'friendly'
-        : w.relationship > 10 ? 'curious'
-        : w.relationship < -10 ? 'hostile'
-        : 'neutral';
+      const rel = getRelationshipTier(w);
       const tierLabel = d.tier === 1 ? 'T1' : d.tier === 2 ? 'T2' : 'T3';
       const tierClass = d.tier <= 2 ? 'tier-major' : 'tier-minor';
       const allyBadge = w.isAlliedWithPlayer ? ' <span class="walker-ally-badge">ALLY</span>' : '';
@@ -1219,7 +1471,7 @@ export function handleSceneNext(state: GameState) {
     const panel = scene.panels[scene.currentPanel];
     const isLast = scene.currentPanel >= scene.panels.length - 1;
     const textEl = document.querySelector('.scene-text');
-    if (textEl) textEl.innerHTML = panel.text;
+    if (textEl) textEl.innerHTML = escapeHtml(panel.text);
     const counterEl = document.querySelector('.scene-counter');
     if (counterEl) counterEl.textContent = `${scene.currentPanel + 1}/${scene.panels.length}`;
     if (isLast) {
@@ -1318,7 +1570,7 @@ function updateSceneOverlay(state: GameState) {
   const html = `
     <div class="scene-overlay">
       <div class="scene-box">
-        <div class="scene-text">${panel.text}</div>
+        <div class="scene-text">${escapeHtml(panel.text)}</div>
         <div class="scene-footer">
           <span class="scene-counter">${scene.currentPanel + 1}/${scene.panels.length}</span>
           ${isLast
@@ -1498,11 +1750,15 @@ let llmOverlayCreated = false;
 let llmOverlayWalkerId = -1;
 let renderedChatMsgCount = 0;
 let llmStreamingShown = false;
+let pausedFromChat = false;
+let chatOpenRelationship = 0;  // relationship value when chat opened (for trend arrow)
 
 function createLLMOverlay(container: HTMLElement, dlg: GameState['llmDialogue']) {
   if (!dlg) return;
   const w = gameState?.walkers.find(ws => ws.walkerNumber === dlg.walkerId);
-  const relLabel = !w ? '' : w.relationship > 40 ? 'friendly' : w.relationship > 10 ? 'curious' : w.relationship < -10 ? 'hostile' : 'neutral';
+  const relLabel = !w ? '' : getRelationshipTier(w);
+  const fillPct = !w ? 50 : ((w.relationship + 100) / 200) * 100;
+  chatOpenRelationship = w ? w.relationship : 0;
 
   container.innerHTML = `
     <div class="dialogue-overlay" id="llm-overlay-bg">
@@ -1510,13 +1766,31 @@ function createLLMOverlay(container: HTMLElement, dlg: GameState['llmDialogue'])
         <div class="llm-chat-header">
           <div>
             <span class="dialogue-speaker" id="llm-speaker">${dlg.walkerName} (#${dlg.walkerId})</span>
-            <span class="walker-disposition ${relLabel}" id="llm-rel-label" style="margin-left:0.5rem;">${relLabel}</span>
+            <div style="display:flex;align-items:center;gap:0.3rem;">
+              <button class="stop-world-btn" data-action="toggle-pause-chat" id="llm-pause-btn">\u25A0 STOP</button>
+              <button class="speed-btn" data-action="close-chat" style="font-size:0.8rem;width:auto;padding:0.2rem 0.5rem;">X</button>
+            </div>
           </div>
-          <button class="speed-btn" data-action="close-chat" style="font-size:0.8rem;width:auto;padding:0.2rem 0.5rem;">X</button>
+          <div class="chat-rel-row">
+            <div class="rel-gauge">
+              <div class="rel-gauge-bar">
+                <div class="rel-gauge-marker" id="llm-rel-marker" style="left:${fillPct}%"></div>
+              </div>
+              <span class="walker-disposition ${relLabel}" id="llm-rel-label">${relLabel}</span>
+              <span class="rel-gauge-trend" id="llm-rel-trend"></span>
+            </div>
+          </div>
+          <div class="chat-stat-bars" id="chat-stat-bars">
+            <div class="chat-stat"><span class="chat-stat-lbl">YOU</span><span class="chat-stat-lbl">MRL</span><div class="chat-stat-track"><div class="chat-stat-fill morale" id="cs-p-morale" style="width:75%"></div></div></div>
+            <div class="chat-stat"><span class="chat-stat-lbl"></span><span class="chat-stat-lbl">STM</span><div class="chat-stat-track"><div class="chat-stat-fill stamina" id="cs-p-stamina" style="width:75%"></div></div></div>
+            <div class="chat-stat"><span class="chat-stat-lbl">THEM</span><span class="chat-stat-lbl">MRL</span><div class="chat-stat-track"><div class="chat-stat-fill morale" id="cs-w-morale" style="width:50%"></div></div></div>
+            <div class="chat-stat"><span class="chat-stat-lbl"></span><span class="chat-stat-lbl">STM</span><div class="chat-stat-track"><div class="chat-stat-fill stamina" id="cs-w-stamina" style="width:50%"></div></div></div>
+          </div>
         </div>
         <div class="llm-chat-messages" id="llm-chat-messages">
           <div class="chat-hint" id="llm-chat-hint">Say something to start a conversation...</div>
         </div>
+        <div class="chat-social-actions" id="chat-social-actions"></div>
         <div class="llm-chat-input-row">
           <input type="text" id="llm-chat-input" class="llm-chat-input" placeholder="Type a message..." autocomplete="off" />
           <button class="action-btn" data-action="send-chat" id="llm-send-btn" style="padding:0.5rem 1rem;">Send</button>
@@ -1543,6 +1817,59 @@ function createLLMOverlay(container: HTMLElement, dlg: GameState['llmDialogue'])
   // Focus input
   const inp = document.getElementById('llm-chat-input') as HTMLInputElement;
   if (inp) inp.focus();
+}
+
+let cachedSocialActionsHtml = '';
+
+function updateChatSocialActions(state: GameState, walkerId: number) {
+  const el = document.getElementById('chat-social-actions');
+  if (!el) return;
+  const w = state.walkers.find(ws => ws.walkerNumber === walkerId);
+  if (!w || !w.alive) { el.innerHTML = ''; cachedSocialActionsHtml = ''; return; }
+
+  const p = state.player;
+  const tier = getRelationshipTier(w);
+  const mile = state.world.milesWalked;
+
+  const foodDisabled = p.foodCooldown > 0;
+  const waterDisabled = p.waterCooldown > 0;
+  const storyDisabled = w.relationship < 10 || (mile - w.lastStoryMile) < 10;
+  const encourageDisabled = (mile - w.lastEncourageMile) < 5;
+  const walkTogetherAvail = w.relationship >= 30 && w.position === p.position;
+
+  const isEnemy = w.isEnemy;
+
+  // Alliance buttons
+  const canProposeAlliance = !w.isAlliedWithPlayer && !w.isEnemy && w.relationship >= 40 && p.alliances.length < 2;
+  const canProposeBond = w.isAlliedWithPlayer && !w.isBonded && w.relationship >= 85 && w.conversationCount >= 8 && p.bondedAlly === null;
+  const canBreakAlliance = w.isAlliedWithPlayer && !w.isBonded;
+
+  const html = `
+    <div class="social-actions-row">
+      <button class="social-btn" data-action="chat-share-food" ${foodDisabled ? 'disabled' : ''}>Share Food${foodDisabled ? ` (${Math.ceil(p.foodCooldown)}m)` : ''}</button>
+      <button class="social-btn" data-action="chat-share-water" ${waterDisabled ? 'disabled' : ''}>Share Water${waterDisabled ? ` (${Math.ceil(p.waterCooldown)}m)` : ''}</button>
+      <button class="social-btn" data-action="chat-tell-story" ${storyDisabled ? 'disabled' : ''}>Tell a Story</button>
+      <button class="social-btn" data-action="chat-encourage" ${encourageDisabled ? 'disabled' : ''}>Encourage</button>
+      ${walkTogetherAvail ? `<button class="social-btn ${w.walkingTogether ? 'active' : ''}" data-action="chat-walk-together">${w.walkingTogether ? 'Walking Together \u2713' : 'Walk Together'}</button>` : ''}
+      ${canProposeAlliance ? '<button class="social-btn alliance-btn" data-action="propose-alliance">Propose Alliance</button>' : ''}
+      ${canProposeBond ? '<button class="social-btn bond-btn" data-action="propose-bond">Propose Bond</button>' : ''}
+      ${canBreakAlliance ? '<button class="social-btn break-btn" data-action="break-alliance">Break Alliance</button>' : ''}
+    </div>
+    ${isEnemy ? `<div class="hostile-actions-row">
+      <button class="hostile-btn" data-action="hostile-taunt">Taunt</button>
+      <button class="hostile-btn" data-action="hostile-lullaby">Lullaby</button>
+      <button class="hostile-btn" data-action="hostile-isolation" ${p.alliances.length === 0 ? 'disabled' : ''}>Isolate</button>
+      <button class="hostile-btn" data-action="hostile-pace">Pace Pressure</button>
+      <button class="hostile-btn" data-action="hostile-crowd">Crowd Turn</button>
+      <button class="hostile-btn hostile-danger" data-action="hostile-trip" ${w.warnings >= 2 ? 'disabled' : ''}>Trip</button>
+      <button class="hostile-btn hostile-danger" data-action="hostile-steal" ${w.warnings >= 2 ? 'disabled' : ''}>Steal Supplies</button>
+    </div>` : ''}
+  `;
+
+  if (html !== cachedSocialActionsHtml) {
+    el.innerHTML = html;
+    cachedSocialActionsHtml = html;
+  }
 }
 
 function updateLLMChatOverlay(state: GameState) {
@@ -1649,13 +1976,53 @@ function updateLLMChatOverlay(state: GameState) {
   // Refocus input when streaming finishes (disabled → enabled transition)
   if (inp && wasDisabled && !dlg.isStreaming) inp.focus();
 
-  // Update relationship label
+  // --- Targeted DOM updates for chat card elements ---
   const w = state.walkers.find(ws => ws.walkerNumber === dlg.walkerId);
-  const relLabel = !w ? '' : w.relationship > 40 ? 'friendly' : w.relationship > 10 ? 'curious' : w.relationship < -10 ? 'hostile' : 'neutral';
-  const relEl = document.getElementById('llm-rel-label');
-  if (relEl && relEl.textContent !== relLabel) {
-    relEl.textContent = relLabel;
-    relEl.className = `walker-disposition ${relLabel}`;
+
+  // Relationship gauge
+  if (w) {
+    const relLabel = getRelationshipTier(w);
+    const relEl = document.getElementById('llm-rel-label');
+    if (relEl && relEl.textContent !== relLabel) {
+      relEl.textContent = relLabel;
+      relEl.className = `walker-disposition ${relLabel}`;
+    }
+    const marker = document.getElementById('llm-rel-marker');
+    if (marker) {
+      const pct = ((w.relationship + 100) / 200) * 100;
+      marker.style.left = `${pct}%`;
+    }
+    const trend = document.getElementById('llm-rel-trend');
+    if (trend) {
+      const arrow = w.relationship > chatOpenRelationship ? '\u2191'
+        : w.relationship < chatOpenRelationship ? '\u2193' : '';
+      if (trend.textContent !== arrow) trend.textContent = arrow;
+    }
+  }
+
+  // Stat bars
+  const pMorale = document.getElementById('cs-p-morale');
+  const pStamina = document.getElementById('cs-p-stamina');
+  const wMorale = document.getElementById('cs-w-morale');
+  const wStamina = document.getElementById('cs-w-stamina');
+  if (pMorale) pMorale.style.width = `${state.player.morale}%`;
+  if (pStamina) pStamina.style.width = `${state.player.stamina}%`;
+  if (w) {
+    if (wMorale) wMorale.style.width = `${w.morale}%`;
+    if (wStamina) wStamina.style.width = `${w.stamina}%`;
+  }
+
+  // Social action buttons
+  updateChatSocialActions(state, dlg.walkerId);
+
+  // "Stop the World" button state
+  const pauseBtn = document.getElementById('llm-pause-btn');
+  if (pauseBtn) {
+    const label = state.isPaused ? '\u25B6 RESUME' : '\u25A0 STOP';
+    if (pauseBtn.textContent !== label) {
+      pauseBtn.textContent = label;
+      pauseBtn.classList.toggle('active', state.isPaused);
+    }
   }
 }
 

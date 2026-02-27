@@ -210,6 +210,7 @@ document.addEventListener('keydown', (e) => {
 
   switch (e.key) {
     case ' ':
+    case 'p':
       e.preventDefault();
       state.isPaused = !state.isPaused;
       break;

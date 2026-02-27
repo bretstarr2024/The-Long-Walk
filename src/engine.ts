@@ -7,7 +7,7 @@ import { addNarrative, getAliveWalkers, getWalkerData, getWalkersRemaining, upda
 import { getRouteSegment, getCrowdPhase, AMBIENT_DESCRIPTIONS } from './data/route';
 import {
   checkForCrisis, updateActiveCrisis, updateBladder, updateBowel, updateTempEffects,
-  getActiveSpeedOverride, getActiveStaminaDrainMult,
+  getActiveSpeedOverride, getActiveStaminaDrainMult, triggerBondedGriefCrisis,
 } from './crises';
 
 // ============================================================
@@ -49,6 +49,12 @@ export function gameTick(state: GameState, realDeltaMs: number) {
 
   // Update all NPCs
   updateAllNPCs(state, gameMinutes);
+
+  // Walk Together effects: morale boost + stamina cost per minute
+  updateWalkTogether(state, gameMinutes);
+
+  // Enemy detection: relationship thresholds
+  updateEnemyStatus(state);
 
   // NPC warning system (issues warnings when speed < 4.0, eliminates at 3)
   checkNPCWarnings(state, gameMinutes);
@@ -683,11 +689,32 @@ function eliminateWalker(state: GameState, w: WalkerState, data: import('./types
   const relHit = w.isAlliedWithPlayer ? -30 : (w.relationship > 40 ? -15 : w.relationship > 10 ? -8 : -3);
   state.player.morale = Math.max(0, state.player.morale + relHit);
 
+  // Handle bonded ally death
+  if (w.isBonded && state.player.bondedAlly === w.walkerNumber) {
+    state.player.bondedAlly = null;
+    state.player.morale = Math.max(0, state.player.morale - 40);
+    addNarrative(state, `${data.name} is gone. Your pact is broken by the only thing that could break it.`, 'narration');
+    // Trigger bonded grief crisis if no other crisis active
+    if (!state.player.activeCrisis) {
+      triggerBondedGriefCrisis(state);
+    }
+  }
+
   // Remove from alliances
   if (w.isAlliedWithPlayer) {
     state.player.alliances = state.player.alliances.filter(n => n !== w.walkerNumber);
-    addNarrative(state, `${data.name} is gone.`, 'narration');
+    if (!w.isBonded) {
+      addNarrative(state, `${data.name} is gone.`, 'narration');
+    }
   }
+
+  // Remove from enemies
+  if (w.isEnemy) {
+    state.player.enemies = state.player.enemies.filter(n => n !== w.walkerNumber);
+  }
+
+  // Clear walk-together
+  w.walkingTogether = false;
 
   // Other nearby walkers react
   const alive = getAliveWalkers(state);
@@ -747,11 +774,10 @@ function updateActAndHorror(state: GameState) {
   const mile = state.world.milesWalked;
   const alive = getWalkersRemaining(state);
 
-  // Acts
-  if (mile < 30 && alive > 85) state.world.currentAct = 1;
-  else if (mile < 120 && alive > 50) state.world.currentAct = 2;
-  else if (mile < 250 && alive > 20) state.world.currentAct = 3;
-  else state.world.currentAct = 4;
+  // Acts — monotonically increasing (never regress or skip)
+  if (state.world.currentAct < 2 && (mile >= 30 || alive <= 85)) state.world.currentAct = 2;
+  if (state.world.currentAct < 3 && (mile >= 120 || alive <= 50)) state.world.currentAct = 3;
+  if (state.world.currentAct < 4 && (mile >= 250 || alive <= 20)) state.world.currentAct = 4;
 
   // Horror tiers
   if (mile < 100) state.world.horrorTier = 1;
@@ -824,13 +850,14 @@ export function playerPoop(state: GameState): boolean {
   if (p.activeCrisis) return false;
 
   p.bowel = 0;
-  // Issue 2 warnings
-  issueWarning(state);
-  if (p.alive) issueWarning(state);
+  // Narrative first — warnings can trigger elimination/death which should come after
   addNarrative(state,
     'You can\'t hold it. You don\'t stop walking. The warnings come. The shame is nothing compared to the alternative.',
     'narration'
   );
+  // Issue 2 warnings
+  issueWarning(state);
+  if (p.alive) issueWarning(state);
   return true;
 }
 
@@ -930,6 +957,23 @@ export function shareWater(state: GameState): boolean {
   return true;
 }
 
+function updateWalkTogether(state: GameState, gameMinutes: number) {
+  for (const w of state.walkers) {
+    if (!w.alive || !w.walkingTogether) continue;
+    // Break walk-together if different positions
+    if (w.position !== state.player.position) {
+      w.walkingTogether = false;
+      continue;
+    }
+    // +2 morale/mile, -3 stamina/mile → convert via gameMinutes (1 mile ≈ 15 min at 4 mph)
+    const mileRate = gameMinutes / 15;
+    w.morale = Math.min(100, w.morale + 2 * mileRate);
+    state.player.morale = Math.min(100, state.player.morale + 2 * mileRate);
+    w.stamina = Math.max(0, w.stamina - 3 * mileRate);
+    state.player.stamina = Math.max(0, state.player.stamina - 3 * mileRate);
+  }
+}
+
 export function formAlliance(state: GameState, walkerNum: number): boolean {
   const w = state.walkers.find(w => w.walkerNumber === walkerNum);
   if (!w || !w.alive || w.isAlliedWithPlayer) return false;
@@ -941,4 +985,64 @@ export function formAlliance(state: GameState, walkerNum: number): boolean {
   const data = getWalkerData(state, walkerNum);
   addNarrative(state, `You and ${data?.name || 'Walker #' + walkerNum} are walking together now. An alliance.`, 'narration');
   return true;
+}
+
+export function breakAlliance(state: GameState, walkerNum: number): boolean {
+  const w = state.walkers.find(ws => ws.walkerNumber === walkerNum);
+  if (!w || !w.isAlliedWithPlayer || w.isBonded) return false;
+
+  w.isAlliedWithPlayer = false;
+  w.relationship = -40;
+  w.isEnemy = true;
+  w.walkingTogether = false;
+  state.player.alliances = state.player.alliances.filter(n => n !== walkerNum);
+  if (!state.player.enemies.includes(walkerNum)) {
+    state.player.enemies.push(walkerNum);
+  }
+
+  const data = getWalkerData(state, walkerNum);
+  const name = data?.name || `Walker #${walkerNum}`;
+  addNarrative(state, `You break your alliance with ${name}. The look on their face is something you'll carry.`, 'narration');
+  state.player.morale = Math.max(0, state.player.morale - 10);
+  return true;
+}
+
+export function formBond(state: GameState, walkerNum: number): boolean {
+  const w = state.walkers.find(ws => ws.walkerNumber === walkerNum);
+  if (!w || !w.isAlliedWithPlayer || w.isBonded) return false;
+  if (w.relationship < 85 || w.conversationCount < 8) return false;
+  if (state.player.bondedAlly !== null) return false;
+
+  w.isBonded = true;
+  state.player.bondedAlly = walkerNum;
+
+  const data = getWalkerData(state, walkerNum);
+  const name = data?.name || `Walker #${walkerNum}`;
+  addNarrative(state, `You and ${name} make a pact. Win together or die together. There's no going back.`, 'narration');
+  state.player.morale = Math.min(100, state.player.morale + 15);
+  w.morale = Math.min(100, w.morale + 15);
+  return true;
+}
+
+export function updateEnemyStatus(state: GameState) {
+  for (const w of state.walkers) {
+    if (!w.alive) continue;
+    const data = getWalkerData(state, w.walkerNumber);
+    if (!data || data.tier > 2) continue; // Only Tier 1/2
+
+    // Become enemy when relationship drops below -40
+    if (w.relationship < -40 && !w.isEnemy) {
+      w.isEnemy = true;
+      if (!state.player.enemies.includes(w.walkerNumber)) {
+        state.player.enemies.push(w.walkerNumber);
+      }
+      addNarrative(state, `You can feel ${data.name}'s hatred like heat from a stove. This one is an enemy now.`, 'narration');
+    }
+
+    // Stop being enemy if relationship rises above -20 (hysteresis)
+    if (w.relationship >= -20 && w.isEnemy) {
+      w.isEnemy = false;
+      state.player.enemies = state.player.enemies.filter(n => n !== w.walkerNumber);
+    }
+  }
 }

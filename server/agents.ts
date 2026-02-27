@@ -5,11 +5,10 @@
 
 import { Agent } from '@openai/agents';
 import { buildSystemPrompt, WalkerProfile } from './prompts';
-import { ALL_TOOLS } from './tools';
 
 const MODEL = 'gpt-5.2-chat-latest';
 
-// Cache: one agent per walker number
+// Cache: base agent config per walker (without tools — tools are per-request)
 const agentCache = new Map<number, Agent>();
 
 // Conversation history per walker: Responses API input items
@@ -20,22 +19,20 @@ type InputItem = {
 };
 const historyCache = new Map<number, InputItem[]>();
 
-export function getOrCreateAgent(walker: WalkerProfile): Agent {
-  const existing = agentCache.get(walker.walkerNumber);
-  if (existing) return existing;
-
+export function getOrCreateAgent(walker: WalkerProfile, tools: any[]): Agent {
+  // Tools are request-scoped (closure-bound effects), so always create a fresh agent
+  // but reuse cached instructions. Agent instances are lightweight.
   const agent = new Agent({
     name: `Walker_${walker.walkerNumber}_${walker.name.replace(/\s+/g, '_')}`,
     instructions: buildSystemPrompt(walker),
     handoffDescription: `${walker.name}, walker #${walker.walkerNumber}`,
-    tools: ALL_TOOLS,
+    tools,
     model: MODEL,
     modelSettings: {
       maxTokens: 200,
     },
   });
 
-  agentCache.set(walker.walkerNumber, agent);
   return agent;
 }
 

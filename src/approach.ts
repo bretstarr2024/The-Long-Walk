@@ -160,6 +160,19 @@ export function checkApproach(state: GameState): void {
       }
     }
 
+    // Enemy confrontation: enemy walker nearby, wants to provoke
+    if (w.isEnemy && data.tier <= 2) {
+      const enemyKey = `enemy_confront_${w.walkerNumber}_${Math.floor(state.world.milesWalked / 10)}`;
+      if (!state.triggeredEvents.has(enemyKey)) {
+        candidates.push({
+          walkerNum: w.walkerNumber,
+          type: 'enemy_confrontation',
+          priority: 4,
+          context: `You despise ${state.player.name}. Approach them to needle, taunt, or psychologically provoke. Think Barkovitch — find their weak spot.`,
+        });
+      }
+    }
+
     // Proximity: low-priority fallback — Tier 1/2 walker at your position, hasn't spoken recently
     if (data.tier <= 2 && w.conversationCount > 0) {
       const proxKey = `prox_${w.walkerNumber}_${Math.floor(state.world.milesWalked / 30)}`;
@@ -198,6 +211,8 @@ export function checkApproach(state: GameState): void {
     ? `offer_ally_${chosen.walkerNum}`
     : chosen.type === 'crisis_aftermath'
     ? `crisis_after_${chosen.walkerNum}_${Math.floor(state.lastCrisisResolveMile)}`
+    : chosen.type === 'enemy_confrontation'
+    ? `enemy_confront_${chosen.walkerNum}_${Math.floor(state.world.milesWalked / 10)}`
     : chosen.type === 'proximity'
     ? `prox_${chosen.walkerNum}_${Math.floor(state.world.milesWalked / 30)}`
     : `intro_${chosen.walkerNum}`;
@@ -278,6 +293,8 @@ export function checkApproach(state: GameState): void {
     revealedFacts: w.revealedFacts.length > 0 ? w.revealedFacts : undefined,
     playerActions: w.playerActions.length > 0 ? w.playerActions : undefined,
     isAllied: w.isAlliedWithPlayer || undefined,
+    isBonded: w.isBonded || undefined,
+    isEnemy: w.isEnemy || undefined,
     allyStrain: w.isAlliedWithPlayer ? w.allyStrain : undefined,
   };
 

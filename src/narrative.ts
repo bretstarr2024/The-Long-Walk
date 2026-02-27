@@ -3,7 +3,7 @@
 // ============================================================
 
 import { GameState, NarrativeEntry, GameEvent } from './types';
-import { addNarrative, getWalkersRemaining, getWalkerState } from './state';
+import { addNarrative, getWalkersRemaining, getWalkerState, getWalkerData } from './state';
 
 // ============================================================
 // SCRIPTED EVENTS (checked each tick)
@@ -53,7 +53,7 @@ const SCRIPTED_EVENTS: GameEvent[] = [
     ],
   },
   {
-    id: 'first_elim_shock', type: 'scripted_scene', triggerMile: 8, priority: 10, fired: false,
+    id: 'first_elim_shock', type: 'scripted_scene', triggerMile: 0, priority: 10, fired: false,
     triggerConditions: (s) => s.eliminationCount >= 1,
     presentation: 'scene',
     scenePanels: [
@@ -582,7 +582,7 @@ export function checkHallucinations(state: GameState) {
       const eliminated = state.walkers.filter(w => !w.alive && w.eliminatedAtMile !== null);
       if (eliminated.length > 0) {
         const ghost = eliminated[Math.floor(Math.random() * eliminated.length)];
-        const data = state.walkerData.find(d => d.walkerNumber === ghost.walkerNumber);
+        const data = getWalkerData(state, ghost.walkerNumber);
         if (data) {
           addNarrative(state, `You see ${data.name} walking beside you. But ${data.name} has been gone since mile ${ghost.eliminatedAtMile?.toFixed(0)}. You blink. They're gone.`, 'hallucination');
         }
@@ -649,7 +649,7 @@ export function checkAbsenceEffects(state: GameState) {
     if (w.alive) continue;
     if (w.eliminatedAtMile === null) continue;
 
-    const data = state.walkerData.find(d => d.walkerNumber === w.walkerNumber);
+    const data = getWalkerData(state, w.walkerNumber);
     if (!data || data.tier !== 1) continue;
 
     const milesSinceDeath = mile - w.eliminatedAtMile;

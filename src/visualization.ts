@@ -713,6 +713,43 @@ export function updateVisualization(state: GameState, canvas: HTMLCanvasElement)
     ctx.stroke();
   }
 
+  // --- Enemy walker rings (red pulsing) ---
+  for (const w of state.walkers) {
+    if (!w.alive || !w.isEnemy) continue;
+
+    const band = positionBand(w.position);
+    const seed = w.walkerNumber;
+    const jx = seededJitter(seed, frameCounter * 0.12) * 0.5;
+    const jy = seededJitter(seed + 100, frameCounter * 0.1) * 0.5;
+    const baseX = roadLeft + roadWidth * (0.15 + (seededJitter(seed * 3, 0) * 0.5 + 0.5) * 0.7);
+    const baseY = H * (band[0] + (band[1] - band[0]) * ((seed % 23) / 23));
+
+    const pulse = 0.3 + 0.15 * Math.sin(frameCounter * 0.05);
+    ctx.strokeStyle = `rgba(224, 64, 64, ${pulse})`;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(baseX + jx, baseY + jy, 8, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // --- Bonded ally ring (gold inner ring) ---
+  for (const w of state.walkers) {
+    if (!w.alive || !w.isBonded) continue;
+
+    const band = positionBand(w.position);
+    const seed = w.walkerNumber;
+    const jx = seededJitter(seed, frameCounter * 0.12) * 0.5;
+    const jy = seededJitter(seed + 100, frameCounter * 0.1) * 0.5;
+    const baseX = roadLeft + roadWidth * (0.15 + (seededJitter(seed * 3, 0) * 0.5 + 0.5) * 0.7);
+    const baseY = H * (band[0] + (band[1] - band[0]) * ((seed % 23) / 23));
+
+    ctx.strokeStyle = 'rgba(255, 215, 0, 0.6)';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.arc(baseX + jx, baseY + jy, 5, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
   // --- Alliance connection lines (dashed green between player and allies) ---
   {
     // Compute player screen Y (same logic as player label)

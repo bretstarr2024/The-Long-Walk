@@ -55,6 +55,8 @@ export interface GameContextForAgent {
   revealedFacts?: string[];
   playerActions?: string[];
   isAllied?: boolean;
+  isBonded?: boolean;
+  isEnemy?: boolean;
   allyStrain?: number;
 }
 
