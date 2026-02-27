@@ -531,6 +531,8 @@ const npcWarningBoost = new Map<number, number>();
 const WARNING_ACCUM_THRESHOLD = 8;  // game-minutes below 4.0 to trigger warning
 const WARNING_COOLDOWN = 20;         // game-minutes minimum between warnings
 const WARNING_BOOST_DURATION = 8;    // game-minutes of fight-to-survive speed boost
+// Track walkers awaiting elimination after 3rd warning (walkerNumber -> real timestamp)
+const pendingEliminations = new Map<number, number>();
 
 function checkNPCWarnings(state: GameState, gameMinutes: number) {
   for (const w of state.walkers) {
@@ -571,10 +573,9 @@ function checkNPCWarnings(state: GameState, gameMinutes: number) {
         }
       }
 
-      // Three warnings: eliminated
-      if (w.warnings >= 3) {
-        const data = getWalkerData(state, w.walkerNumber);
-        if (data) eliminateWalker(state, w, data);
+      // Three warnings: queue for delayed elimination (2s for dramatic timing)
+      if (w.warnings >= 3 && !pendingEliminations.has(w.walkerNumber)) {
+        pendingEliminations.set(w.walkerNumber, Date.now());
       }
     } else {
       // Above 4.0 — reset slow accumulator
@@ -594,6 +595,26 @@ function checkNPCWarnings(state: GameState, gameMinutes: number) {
       }
     }
   }
+}
+
+/** Process pending eliminations — called from main.ts each frame. Returns walker numbers eliminated this tick. */
+export function processPendingEliminations(state: GameState): number[] {
+  const eliminated: number[] = [];
+  const now = Date.now();
+  for (const [num, timestamp] of pendingEliminations) {
+    if (now - timestamp >= 2000) {
+      pendingEliminations.delete(num);
+      const w = getWalkerState(state, num);
+      if (w && w.alive) {
+        const data = getWalkerData(state, num);
+        if (data) {
+          eliminateWalker(state, w, data);
+          eliminated.push(num);
+        }
+      }
+    }
+  }
+  return eliminated;
 }
 
 function issueNPCWarning(state: GameState, w: WalkerState) {
@@ -646,7 +667,7 @@ function issueNPCWarning(state: GameState, w: WalkerState) {
         } else {
           reaction = neutral[Math.floor(Math.random() * neutral.length)];
         }
-        addSpeechBubble(state, reactorData.name, reaction, 'warning_reaction', 'right', 4000);
+        addSpeechBubble(state, reactorData.name, reaction, 'warning_reaction', 'right', 8000);
       }
     }
   } else if (data.tier <= 2) {
@@ -710,13 +731,20 @@ function eliminateWalker(state: GameState, w: WalkerState, data: import('./types
   state.eliminationCount++;
 
   // Tier 1 elimination scene: cinematic overlay if player had relationship > 20
-  if (data.tier === 1 && data.eliminationScene && w.relationship > 20 && !state.activeScene) {
-    state.activeScene = {
+  // Delayed 2s after gunshot for dramatic pacing
+  if (data.tier === 1 && data.eliminationScene && w.relationship > 20) {
+    const scene = {
       id: `elim_scene_${w.walkerNumber}`,
       panels: data.eliminationScene,
       currentPanel: 0,
     };
-    state.isPaused = true;
+    state.sceneBlockedUntil = Date.now() + 2000;
+    setTimeout(() => {
+      if (!state.activeScene) {
+        state.activeScene = scene;
+        state.isPaused = true;
+      }
+    }, 2000);
   }
 
   // Narrative
@@ -948,6 +976,7 @@ export function resetEngineGlobals() {
   npcSlowAccum.clear();
   npcLastWarningHour.clear();
   npcWarningBoost.clear();
+  pendingEliminations.clear();
   lastAmbientMile = -5;
   positionTransition = null;
   tier12Numbers = null;

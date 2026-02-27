@@ -548,6 +548,38 @@ export function playWarningVoice(text: string) {
 }
 
 // ============================================================
+// PLEADING — random dying walker begging before gunshot
+// ============================================================
+
+const PLEAS = [
+  "No, please! I can speed up! I can—",
+  "Please, God, no! I'll walk faster! I swear I'll—",
+  "Not me! Please, not—",
+  "Oh God. Oh God, please, I don't want to—",
+  "Wait! Wait, I'm speeding up! Look, I'm—",
+];
+
+export function playPleading(): boolean {
+  if (isMuted || typeof speechSynthesis === 'undefined') return false;
+  const text = PLEAS[Math.floor(Math.random() * PLEAS.length)];
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.rate = 1.2;  // fast, panicked
+  utterance.pitch = 1.3; // higher pitch, terrified
+  utterance.volume = 0.7;
+  const voices = speechSynthesis.getVoices();
+  const english = voices.find(v => v.lang.startsWith('en'));
+  if (english) utterance.voice = english;
+  speechSynthesis.speak(utterance);
+  return true;
+}
+
+export function cancelSpeech() {
+  if (typeof speechSynthesis !== 'undefined') {
+    speechSynthesis.cancel();
+  }
+}
+
+// ============================================================
 // MUTE / VOLUME
 // ============================================================
 

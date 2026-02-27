@@ -116,6 +116,7 @@ export function createInitialGameState(): GameState {
     lastOverheardMile: 0,
     overhearInProgress: false,
     activeScene: null,
+    sceneBlockedUntil: 0,
     activeApproach: null,
     lastApproachMile: 0,
     approachInProgress: false,

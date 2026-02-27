@@ -131,11 +131,14 @@ function setupEventDelegation() {
     }
   });
 
-  app.addEventListener('input', (e: Event) => {
+  // Effort bar click: set effort based on click position within the meter
+  app.addEventListener('click', (e: MouseEvent) => {
     if (!gameState) return;
-    const target = e.target as HTMLInputElement;
-    if (target.id === 'effort-slider') {
-      setPlayerEffort(gameState, parseInt(target.value));
+    const meter = (e.target as HTMLElement).closest('.effort-meter');
+    if (meter && !(e.target as HTMLElement).closest('.effort-arrow')) {
+      const rect = meter.getBoundingClientRect();
+      const pct = Math.round(Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100)));
+      setPlayerEffort(gameState, pct);
     }
   });
 
@@ -1131,11 +1134,10 @@ function createStatusPanel(el: HTMLElement, state: GameState) {
       <span class="stat-label">Effort</span>
       <span class="stat-value" id="sp-effort">${p.effort}%</span>
     </div>
-    <div class="speed-control">
-      <button class="speed-btn" data-action="effort-down">◀</button>
-      <input type="range" min="0" max="100" value="${p.effort}" id="effort-slider" style="flex:1;" />
-      <button class="speed-btn" data-action="effort-up">▶</button>
-      <span class="speed-display" id="sp-effort-val">${p.effort}%</span>
+    <div class="effort-meter" id="sp-effort-meter">
+      <button class="effort-arrow" data-action="effort-down">◀</button>
+      <div class="effort-meter-bar" id="sp-effort-bar" style="width:${p.effort}%"></div>
+      <button class="effort-arrow" data-action="effort-up">▶</button>
     </div>
     <div class="warning-display" id="sp-warnings"></div>
     <div class="stat-row" title="Stamina: Physical endurance. Lower effort to recover."><span class="stat-label" style="width:36px"><span class="si si-stamina">${ICON.stamina}</span> STA</span><div class="stat-bar"><div class="stat-bar-fill" id="sp-bar-sta"></div></div><span class="stat-value" id="sp-val-sta" style="width:24px;text-align:right;font-size:0.7rem;"></span></div>
@@ -1230,18 +1232,10 @@ function updateStatusPanel(state: GameState) {
     effortEl.textContent = `${p.effort}%`;
     effortEl.style.color = p.speed < 4 ? 'var(--accent-red)' : 'var(--text-primary)';
   }
-  const effortValEl = document.getElementById('sp-effort-val');
-  if (effortValEl) {
-    effortValEl.textContent = `${p.effort}%`;
-    effortValEl.className = `speed-display ${p.speed < 4 ? 'danger' : ''}`;
-  }
-
-  // Effort slider — update without replacing (only if user isn't dragging)
-  const slider = document.getElementById('effort-slider') as HTMLInputElement;
-  if (slider && document.activeElement !== slider) {
-    const newVal = String(p.effort);
-    if (slider.value !== newVal) slider.value = newVal;
-    slider.style.accentColor = p.speed < 4 ? 'var(--accent-red)' : 'var(--accent-blue)';
+  // Effort bar — update fill width
+  const effortBar = document.getElementById('sp-effort-bar');
+  if (effortBar) {
+    effortBar.style.width = `${p.effort}%`;
   }
 
   // Warning pips (cached to prevent 5fps innerHTML rebuilds)
@@ -1551,19 +1545,24 @@ export function handleSceneClose(state: GameState) {
 }
 
 // --- Approach handlers ---
+function clearApproachBanner() {
+  const container = document.getElementById('approach-container');
+  if (container) container.innerHTML = '';
+  cachedApproachHtml = '';
+  approachCreated = false;
+}
+
 function handleApproachReply(state: GameState) {
   if (!state.activeApproach) return;
   const approach = state.activeApproach;
-  // Open LLM chat with this walker, pre-seeded with their opening line
   const walkerNum = approach.walkerId;
   const w = getWalkerState(state, walkerNum);
   const data = getWalkerData(state, walkerNum);
   if (!w || !w.alive || !data) {
     state.activeApproach = null;
-    cachedApproachHtml = '';
+    clearApproachBanner();
     return;
   }
-  // Set up LLM dialogue with approach text as first walker message
   if (state.llmDialogue) state.llmDialogue = null;
   state.llmDialogue = {
     walkerId: walkerNum,
@@ -1573,8 +1572,7 @@ function handleApproachReply(state: GameState) {
     streamBuffer: '',
   };
   state.activeApproach = null;
-  cachedApproachHtml = '';
-  approachCreated = false;
+  clearApproachBanner();
 }
 
 function handleApproachNod(state: GameState) {
@@ -1586,8 +1584,7 @@ function handleApproachNod(state: GameState) {
   }
   addNarrative(state, `You nod at ${state.activeApproach.walkerName}. They seem satisfied.`, 'narration');
   state.activeApproach = null;
-  cachedApproachHtml = '';
-  approachCreated = false;
+  clearApproachBanner();
 }
 
 function handleApproachIgnore(state: GameState) {
@@ -1598,8 +1595,7 @@ function handleApproachIgnore(state: GameState) {
   }
   addNarrative(state, `You keep your eyes ahead. ${state.activeApproach.walkerName} falls back.`, 'narration');
   state.activeApproach = null;
-  cachedApproachHtml = '';
-  approachCreated = false;
+  clearApproachBanner();
 }
 
 // --- Scene overlay: cached ---
@@ -1719,7 +1715,7 @@ function updateSpeechBubbles(state: GameState) {
     const domId = `sb-${b.id}`;
     let el = document.getElementById(domId);
     const age = now - b.startTime;
-    const fadeOut = age > b.duration - 600;
+    const fadeOut = age > b.duration - 1500;
 
     if (!el) {
       el = document.createElement('div');
@@ -1736,7 +1732,7 @@ function updateSpeechBubbles(state: GameState) {
   }
 }
 
-export function addSpeechBubble(state: GameState, speaker: string, text: string, type: 'overheard' | 'warning_reaction', position: 'left' | 'right', durationMs = 6000) {
+export function addSpeechBubble(state: GameState, speaker: string, text: string, type: 'overheard' | 'warning_reaction', position: 'left' | 'right', durationMs = 12000) {
   // Limit to 4 visible bubbles
   if (state.speechBubbles.length >= 4) {
     state.speechBubbles.shift();
@@ -1757,7 +1753,7 @@ export function queueOverheardBubbles(state: GameState, lines: Array<{speaker: s
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const position: 'left' | 'right' = i % 2 === 0 ? 'left' : 'right';
-    const duration = Math.max(4000, line.text.length * 55);
+    const duration = Math.max(8000, line.text.length * 110);
     setTimeout(() => {
       addSpeechBubble(state, line.speaker, line.text, 'overheard', position, duration);
     }, delay);
@@ -1970,7 +1966,7 @@ function updateChatSocialActions(state: GameState, walkerId: number) {
 
   const foodDisabled = p.foodCooldown > 0;
   const waterDisabled = p.waterCooldown > 0;
-  const storyDisabled = w.relationship < 10 || (mile - w.lastStoryMile) < 10;
+  const storyDisabled = (mile - w.lastStoryMile) < 10;
   const encourageDisabled = (mile - w.lastEncourageMile) < 5;
   const walkTogetherAvail = w.relationship >= 30 && w.position === p.position;
 

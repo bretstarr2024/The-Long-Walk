@@ -19,6 +19,11 @@ export function checkScriptedEvents(state: GameState) {
     state.triggeredEvents.add(event.id);
 
     // Scene presentation: pause game and show cinematic overlay (not during LLM chat)
+    // Respect sceneBlockedUntil — allows gunshot/pleading to play before scene appears
+    if (state.sceneBlockedUntil && Date.now() < state.sceneBlockedUntil) {
+      state.triggeredEvents.delete(event.id); // re-try next tick
+      return;
+    }
     if (event.presentation === 'scene' && event.scenePanels && !state.activeScene && !state.llmDialogue) {
       state.activeScene = {
         id: event.id,

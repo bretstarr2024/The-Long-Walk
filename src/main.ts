@@ -4,7 +4,7 @@
 
 import './styles.css';
 import { createInitialGameState, addNarrative } from './state';
-import { gameTick } from './engine';
+import { gameTick, processPendingEliminations } from './engine';
 import { checkScriptedEvents, checkHallucinations, checkOverheards, checkEnding, checkAbsenceEffects } from './narrative';
 import { checkAmbientOverhear } from './overhear';
 import { checkApproach } from './approach';
@@ -17,6 +17,7 @@ import {
   initAudio, ensureResumed, startAmbientDrone, stopAmbientDrone,
   updateDroneIntensity, calculateIntensity,
   playGunshot, playWarningBuzzer, playWarningVoice, isAudioInitialized,
+  playPleading, cancelSpeech,
 } from './audio';
 
 // ============================================================
@@ -36,8 +37,9 @@ async function init() {
   const startAudio = () => {
     if (!isAudioInitialized()) {
       initAudio();
+      startAmbientDrone(); // Start music on first interaction (title page)
+      droneStarted = true;
       console.log('[Main] Audio initialized on user gesture');
-      // Remove listeners after init — ensureResumed no longer needed as click handlers
       document.removeEventListener('click', startAudio);
       document.removeEventListener('keydown', startAudio);
     }
@@ -78,12 +80,6 @@ function gameLoop(timestamp: number) {
   }
 
   if (state.screen === 'game' && !state.isPaused && state.player.alive) {
-    // Start ambient drone when game begins
-    if (!droneStarted && isAudioInitialized()) {
-      startAmbientDrone();
-      droneStarted = true;
-    }
-
     // Force game speed to 1x during active crisis
     if (state.player.activeCrisis && state.gameSpeed > 1) {
       state.gameSpeed = 1;
@@ -113,25 +109,31 @@ function gameLoop(timestamp: number) {
     // Check NPC approaches (they come to you)
     checkApproach(state);
 
-    // Trigger sounds for new narrative entries
-    // Gunshots are delayed so the 3rd warning voice plays first
-    let pendingGunshots = 0;
+    // Trigger warning sounds for new narrative entries
     for (let i = prevNarrativeCount; i < state.narrativeLog.length; i++) {
       const entry = state.narrativeLog[i];
-      if (entry.type === 'elimination') {
-        pendingGunshots++;
-      } else if (entry.type === 'warning') {
+      if (entry.type === 'warning') {
         const match = entry.text.match(/"([^"]+)"/);
         if (match) {
           playWarningVoice(match[1]);
+          // 30% chance of pleading after a 3rd/final warning
+          if (match[1].includes('Final warning') && Math.random() < 0.3) {
+            setTimeout(() => playPleading(), 1500);
+          }
         } else {
           playWarningBuzzer();
         }
       }
     }
-    // Fire gunshots after warning voice finishes (~3s for buzzer + speech)
-    for (let g = 0; g < pendingGunshots; g++) {
-      setTimeout(playGunshot, 3000 + g * 500);
+
+    // Process delayed eliminations (2s after 3rd warning)
+    // Gunshot fires at moment of elimination, cutting off any pleading
+    const eliminated = processPendingEliminations(state);
+    for (let g = 0; g < eliminated.length; g++) {
+      setTimeout(() => {
+        cancelSpeech(); // Cut off pleading
+        playGunshot();
+      }, g * 500);
     }
 
     // Update drone intensity based on game state

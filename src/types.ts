@@ -391,6 +391,7 @@ export interface GameState {
   lastOverheardMile: number;    // mile of last overheard conversation
   overhearInProgress: boolean;  // prevents overlapping LLM overheards
   activeScene: ActiveScene | null;
+  sceneBlockedUntil: number;  // real timestamp — no scene overlays before this time
   activeApproach: ApproachState | null;
   lastApproachMile: number;
   approachInProgress: boolean;  // prevents overlapping approach LLM calls
