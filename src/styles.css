@@ -974,6 +974,7 @@ html, body {
    ============================================================ */
 
 .llm-chat-box {
+  position: relative;
   background: var(--bg-panel);
   border: 1px solid var(--border-accent);
   border-radius: 4px;
@@ -983,6 +984,31 @@ html, body {
   max-height: 500px;
   display: flex;
   flex-direction: column;
+}
+
+.chat-close-btn {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-dim);
+  font-size: 1.2rem;
+  width: 1.8rem;
+  height: 1.8rem;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 2px;
+  z-index: 1;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.chat-close-btn:hover {
+  border-color: var(--accent-red);
+  color: var(--accent-red);
+  background: rgba(224, 64, 64, 0.1);
 }
 
 .llm-chat-header {
@@ -1119,6 +1145,26 @@ html, body {
   opacity: 0.3;
   cursor: not-allowed;
 }
+
+/* --- Social/action icon system --- */
+.si {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 0.2rem;
+  vertical-align: middle;
+}
+.si svg { width: 14px; height: 14px; }
+.si-food { color: var(--accent-amber); }
+.si-water { color: var(--accent-blue); }
+.si-story { color: var(--accent-purple); }
+.si-encourage { color: var(--accent-green); }
+.si-walk { color: var(--accent-green); }
+.si-alliance { color: var(--accent-green); }
+.si-bond { color: #ffd700; }
+.si-break { color: var(--accent-red); }
+.si-talk { color: var(--accent-blue); }
+.si-think { color: var(--accent-purple); }
+.si-observe { color: var(--accent-amber); }
 .social-btn.alliance-btn {
   border-color: var(--accent-green);
   color: var(--accent-green);
@@ -1662,6 +1708,102 @@ html, body {
   border-color: var(--text-primary);
   color: var(--text-primary);
   background: rgba(255, 255, 255, 0.03);
+}
+
+/* ============================================================
+   SPEECH BUBBLES — Overheard conversations & warning reactions
+   ============================================================ */
+
+#speech-bubble-container {
+  position: fixed;
+  top: 65px;
+  right: 1rem;
+  width: 340px;
+  pointer-events: none;
+  z-index: 110;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.speech-bubble {
+  position: relative;
+  padding: 0.5rem 0.8rem;
+  border-radius: 10px;
+  animation: bubbleIn 0.35s ease;
+  pointer-events: none;
+  backdrop-filter: blur(6px);
+}
+.speech-bubble::after {
+  content: '';
+  position: absolute;
+  bottom: -7px;
+  width: 0;
+  height: 0;
+  border-style: solid;
+}
+
+.sb-left {
+  align-self: flex-start;
+  background: rgba(18, 22, 34, 0.92);
+  border: 1px solid rgba(64, 128, 208, 0.25);
+}
+.sb-left::after {
+  left: 18px;
+  border-width: 7px 7px 0 0;
+  border-color: rgba(18, 22, 34, 0.92) transparent transparent transparent;
+}
+.sb-right {
+  align-self: flex-end;
+  background: rgba(22, 26, 38, 0.92);
+  border: 1px solid rgba(64, 128, 208, 0.2);
+}
+.sb-right::after {
+  right: 18px;
+  border-width: 7px 0 0 7px;
+  border-color: rgba(22, 26, 38, 0.92) transparent transparent transparent;
+}
+
+.sb-overheard {
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+}
+.sb-warning_reaction {
+  border-color: rgba(212, 160, 32, 0.3);
+  box-shadow: 0 2px 12px rgba(212, 160, 32, 0.12);
+}
+
+.sb-speaker {
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  letter-spacing: 0.06rem;
+  text-transform: uppercase;
+  margin-bottom: 0.15rem;
+}
+.sb-overheard .sb-speaker { color: var(--accent-blue); }
+.sb-warning_reaction .sb-speaker { color: var(--accent-amber); }
+
+.sb-text {
+  font-family: var(--font-narrative);
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--text-primary);
+  font-style: italic;
+}
+
+.sb-fading {
+  animation: bubbleOut 0.5s ease forwards;
+}
+
+@keyframes bubbleIn {
+  from { opacity: 0; transform: translateY(-8px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes bubbleOut {
+  to { opacity: 0; transform: translateY(-4px) scale(0.98); }
+}
+
+@media (max-width: 700px) {
+  #speech-bubble-container { width: 260px; right: 0.5rem; }
 }
 
 /* ============================================================

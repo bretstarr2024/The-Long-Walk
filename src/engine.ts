@@ -4,6 +4,7 @@
 
 import { GameState, WalkerState, NarrativeEntry, Act, HorrorTier } from './types';
 import { addNarrative, getAliveWalkers, getWalkerData, getWalkerState, getWalkersRemaining, updateCurrentTime } from './state';
+import { addSpeechBubble } from './ui';
 import { getRouteSegment, getCrowdPhase, AMBIENT_DESCRIPTIONS } from './data/route';
 import {
   checkForCrisis, updateActiveCrisis, updateBladder, updateBowel, updateTempEffects,
@@ -411,11 +412,11 @@ export function issueWarning(state: GameState) {
 
   let announcement: string;
   if (p.warnings === 1) {
-    announcement = '"Warning! Warning 100!" The soldier\'s voice is flat. Mechanical.';
+    announcement = '"Warning. Warning 100." The soldier\'s voice is flat. Mechanical.';
   } else if (p.warnings === 2) {
-    announcement = '"Warning! Second warning, 100!" The soldier\'s voice is flat. Mechanical.';
+    announcement = '"Second warning, 100." The soldier\'s voice is flat. Mechanical.';
   } else {
-    announcement = '"Warning! Warning 100! Third warning, 100!" The soldier\'s voice is flat. Mechanical.';
+    announcement = '"Third warning, 100. Final warning." The soldier\'s voice is flat. Mechanical.';
   }
   addNarrative(state, announcement, 'warning');
 
@@ -602,17 +603,54 @@ function issueNPCWarning(state: GameState, w: WalkerState) {
 
   let announcement: string;
   if (w.warnings === 1) {
-    announcement = `"Warning! Warning ${w.walkerNumber}!"`;
+    announcement = `"Warning. Warning ${w.walkerNumber}."`;
   } else if (w.warnings === 2) {
-    announcement = `"Warning! Second warning, ${w.walkerNumber}!"`;
+    announcement = `"Second warning, ${w.walkerNumber}."`;
   } else {
-    announcement = `"Warning! Warning ${w.walkerNumber}! Third warning, ${w.walkerNumber}!"`;
+    announcement = `"Third warning, ${w.walkerNumber}. Final warning."`;
   }
 
   if (w.position === state.player.position) {
-    addNarrative(state, `${announcement} ${data.name}.`, 'warning');
+    addNarrative(state, announcement, 'warning');
+
+    // Trigger a bystander reaction bubble from a nearby Tier 1/2 NPC
+    const reactors = state.walkers.filter(r =>
+      r.alive && r.walkerNumber !== w.walkerNumber &&
+      r.position === state.player.position &&
+      (getWalkerData(state, r.walkerNumber)?.tier ?? 3) <= 2
+    );
+    if (reactors.length > 0) {
+      const reactor = reactors[Math.floor(Math.random() * reactors.length)];
+      const reactorData = getWalkerData(state, reactor.walkerNumber);
+      if (reactorData) {
+        const sympathetic = [
+          `That's ${data.name}... come on, pick it up...`,
+          `Oh no. Not ${data.name}.`,
+          `${data.name}, move your feet!`,
+        ];
+        const unsympathetic = [
+          `Not gonna shed a tear over that one.`,
+          `One less to worry about.`,
+          `Saw that coming a mile back.`,
+        ];
+        const neutral = [
+          `There goes another one...`,
+          `Keep walking. Don't look.`,
+          `How many is that now?`,
+        ];
+        let reaction: string;
+        if (w.relationship > 20 || reactor.relationship > 20) {
+          reaction = sympathetic[Math.floor(Math.random() * sympathetic.length)];
+        } else if (w.relationship < -20) {
+          reaction = unsympathetic[Math.floor(Math.random() * unsympathetic.length)];
+        } else {
+          reaction = neutral[Math.floor(Math.random() * neutral.length)];
+        }
+        addSpeechBubble(state, reactorData.name, reaction, 'warning_reaction', 'right', 4000);
+      }
+    }
   } else if (data.tier <= 2) {
-    addNarrative(state, `From the ${w.position} of the pack: ${announcement} ${data.name}.`, 'warning');
+    addNarrative(state, `From the ${w.position} of the pack: ${announcement}`, 'warning');
   }
   // Tier 3 at different position: silent (too many to narrate)
 }

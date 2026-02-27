@@ -29,6 +29,7 @@ export function createDefaultPlayer(): PlayerState {
     position: 'middle',
     foodCooldown: 0,
     waterCooldown: 0,
+    lastThinkMile: -10,
     alliances: [],
     bondedAlly: null,
     enemies: [],
@@ -121,6 +122,8 @@ export function createInitialGameState(): GameState {
     lastWarningMile: 0,
     lastCrisisResolveMile: 0,
     lastEnemyActionMile: 0,
+    speechBubbles: [],
+    nextBubbleId: 1,
   };
 }
 

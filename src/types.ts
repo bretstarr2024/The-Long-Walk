@@ -126,6 +126,7 @@ export interface PlayerState {
   position: PackPosition;
   foodCooldown: number;  // game-minutes until food can be requested
   waterCooldown: number; // game-minutes until water can be requested
+  lastThinkMile: number; // mile of last "Think About Prize" action (cooldown)
   alliances: number[];   // walker_numbers of allied NPCs
   bondedAlly: number | null;   // walker number of bonded ally (max 1)
   enemies: number[];           // walker numbers of active enemies
@@ -396,6 +397,19 @@ export interface GameState {
   lastWarningMile: number;      // mile of player's most recent warning (for approach triggers)
   lastCrisisResolveMile: number; // mile of last resolved crisis (for approach triggers)
   lastEnemyActionMile: number;   // mile of last enemy hostile action (cooldown)
+  speechBubbles: SpeechBubble[];
+  nextBubbleId: number;
+}
+
+// --- Speech Bubble System ---
+export interface SpeechBubble {
+  id: number;
+  speaker: string;
+  text: string;
+  startTime: number;   // Date.now() when bubble appeared
+  duration: number;     // ms to display
+  position: 'left' | 'right';
+  type: 'overheard' | 'warning_reaction';
 }
 
 // --- Route Data ---

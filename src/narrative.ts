@@ -4,6 +4,7 @@
 
 import { GameState, NarrativeEntry, GameEvent } from './types';
 import { addNarrative, getWalkersRemaining, getWalkerState, getWalkerData } from './state';
+import { queueOverheardBubbles } from './ui';
 
 // ============================================================
 // SCRIPTED EVENTS (checked each tick)
@@ -80,7 +81,7 @@ const SCRIPTED_EVENTS: GameEvent[] = [
     presentation: 'scene',
     scenePanels: [
       { text: 'A commotion ahead. Barkovitch is in someone\'s face, needling, taunting. The other walker stumbles — distracted, furious — and his speed drops.', type: 'narration' },
-      { text: '"Warning! Warning 22!" The soldier\'s voice cuts through. It happens fast after that. Barkovitch grins as the walker goes down.', type: 'warning' },
+      { text: '"Warning. Warning 22." The soldier\'s voice cuts through. It happens fast after that. Barkovitch grins as the walker goes down.', type: 'warning' },
       { text: '"I\'ll dance on all your graves," he calls out. The hatred aimed at him is palpable. Several walkers move away. A pariah is born.', type: 'narration' },
     ],
     execute: (s) => [
@@ -136,7 +137,7 @@ const SCRIPTED_EVENTS: GameEvent[] = [
     scenePanels: [
       { text: 'Olson is screaming now. Incoherent. He staggers, nearly falls, catches himself. The bravado, the swagger, the "I\'m gonna win" — all of it stripped away.', type: 'narration' },
       { text: 'What\'s left is a seventeen-year-old boy who is terrified to die.', type: 'narration' },
-      { text: '"Warning! Second warning, 70!" Olson screams at the soldiers. Obscenities. Pleas. They don\'t react.', type: 'warning' },
+      { text: '"Second warning, 70." Olson screams at the soldiers. Obscenities. Pleas. They don\'t react.', type: 'warning' },
     ],
     execute: (s) => [
       entry(s, 'Olson has his second warning. He\'s breaking down.', 'narration'),
@@ -224,7 +225,7 @@ const SCRIPTED_EVENTS: GameEvent[] = [
       { text: '"I\'M DANCING!" he screams. "I TOLD YOU I\'D DANCE! I\'M DANCING ON ALL YOUR GRAVES!"', type: 'narration' },
     ],
     execute: (s) => [
-      entry(s, '"Warning! Warning 5!" He doesn\'t stop dancing.', 'warning'),
+      entry(s, '"Warning. Warning 5." He doesn\'t stop dancing.', 'warning'),
     ],
   },
 
@@ -261,7 +262,7 @@ const SCRIPTED_EVENTS: GameEvent[] = [
     scenePanels: [
       { text: 'McVries slows. Not stumbling. Not failing. Just... slowing. Choosing.', type: 'narration' },
       { text: 'He sits down on the road. Cross-legged. Like a kid at a campfire. He looks up at the sky.', type: 'narration' },
-      { text: '"Warning! Warning 61!" McVries doesn\'t move. His face is peaceful. A small smile — the one with the scar, the real one.', type: 'narration' },
+      { text: '"Warning. Warning 61." McVries doesn\'t move. His face is peaceful. A small smile — the one with the scar, the real one.', type: 'narration' },
     ],
     execute: (s) => [
       entry(s, 'McVries sits down. He\'s choosing.', 'narration'),
@@ -556,13 +557,11 @@ export function checkOverheards(state: GameState) {
     state.triggeredEvents.add(conv.id);
     state.lastOverheardMile = state.world.milesWalked;
 
-    // Add a scene-setting line, then each dialogue line
+    // Show as speech bubbles instead of narrative log wall-of-text
     const lines = conv.lines(state);
-    addNarrative(state, 'You overhear a conversation nearby...', 'overheard');
-    for (const line of lines) {
-      addNarrative(state, `${line.speaker}: ${line.text}`, 'overheard');
-    }
-    // Only fire one overheard per tick to avoid wall of text
+    queueOverheardBubbles(state, lines);
+    addNarrative(state, `You overhear ${lines[0]?.speaker || 'walkers'} talking nearby...`, 'overheard');
+    // Only fire one overheard per tick
     return;
   }
 }

@@ -5,6 +5,7 @@
 
 import { GameState } from './types';
 import { addNarrative, getWalkerData, getWalkerState, getWalkersRemaining } from './state';
+import { queueOverheardBubbles } from './ui';
 import { requestOverhear, type WalkerProfile, type GameContextForAgent } from './agentClient';
 import { NPC_RELATIONSHIPS } from './data/walkers';
 
@@ -217,14 +218,17 @@ export function checkAmbientOverhear(state: GameState): void {
       state.lastOverheardMile = state.world.milesWalked;
       if (arcStageKey) state.triggeredEvents.add(arcStageKey);
 
-      // Parse the response into narrative entries
-      addNarrative(state, 'You overhear a conversation nearby...', 'overheard');
-
-      // Split response into lines and add each as an overheard entry
-      const lines = result.text.split('\n').filter(l => l.trim());
-      for (const line of lines) {
-        addNarrative(state, line.trim(), 'overheard');
-      }
+      // Parse response into speech bubbles
+      const rawLines = result.text.split('\n').filter(l => l.trim());
+      const bubbleLines = rawLines.map(line => {
+        const colonIdx = line.indexOf(':');
+        if (colonIdx > 0 && colonIdx < 25) {
+          return { speaker: line.substring(0, colonIdx).trim(), text: line.substring(colonIdx + 1).trim() };
+        }
+        return { speaker: profileA.name, text: line.trim() };
+      });
+      queueOverheardBubbles(state, bubbleLines);
+      addNarrative(state, `You overhear ${profileA.name} and ${profileB.name} talking nearby...`, 'overheard');
     })
     .catch((err) => {
       state.overhearInProgress = false;

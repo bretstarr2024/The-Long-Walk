@@ -17,6 +17,21 @@ let app: HTMLElement;
 let currentRenderedScreen: string = '';
 let gameState: GameState | null = null;
 
+// --- Social action icons (inline SVG, 14px) ---
+const ICON = {
+  food: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="3" y="5" width="10" height="7" rx="1.5" stroke="currentColor" stroke-width="1.3"/><path d="M5 5V3.5a3 3 0 016 0V5" stroke="currentColor" stroke-width="1.3" fill="none"/></svg>',
+  water: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2.5C6.5 5.5 4 8 4 10.5a4 4 0 008 0C12 8 9.5 5.5 8 2.5z" stroke="currentColor" stroke-width="1.3" fill="none"/></svg>',
+  story: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="3" y="2" width="10" height="12" rx="1" stroke="currentColor" stroke-width="1.3"/><line x1="5.5" y1="5" x2="10.5" y2="5" stroke="currentColor" stroke-width="0.9"/><line x1="5.5" y1="7.5" x2="10.5" y2="7.5" stroke="currentColor" stroke-width="0.9"/><line x1="5.5" y1="10" x2="8.5" y2="10" stroke="currentColor" stroke-width="0.9"/></svg>',
+  encourage: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2.5l1.8 3.6 4 .6-2.9 2.8.7 4L8 11.5l-3.6 2-.7-4-2.9-2.8 4-.6z" stroke="currentColor" stroke-width="1.3" fill="none"/></svg>',
+  walk: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="5.5" cy="3.5" r="1.5" stroke="currentColor" stroke-width="1.1"/><path d="M5.5 5.5v4l-1.5 3.5" stroke="currentColor" stroke-width="1.3"/><path d="M5.5 7.5l2 2" stroke="currentColor" stroke-width="1.3"/><circle cx="10.5" cy="3.5" r="1.5" stroke="currentColor" stroke-width="1.1"/><path d="M10.5 5.5v4l1.5 3.5" stroke="currentColor" stroke-width="1.3"/><path d="M10.5 7.5l-2 2" stroke="currentColor" stroke-width="1.3"/></svg>',
+  alliance: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 10l3-3 2.5 2.5L12 6" stroke="currentColor" stroke-width="1.3"/><path d="M9.5 6H12v2.5" stroke="currentColor" stroke-width="1.3"/></svg>',
+  bond: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 4.5C7 3 5 2.5 3.8 3.8 2.5 5 2.8 7 8 11.5c5.2-4.5 5.5-6.5 4.2-7.7C11 2.5 9 3 8 4.5z" stroke="currentColor" stroke-width="1.3" fill="none"/></svg>',
+  breakIt: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><line x1="4" y1="4" x2="12" y2="12" stroke="currentColor" stroke-width="1.5"/><line x1="12" y1="4" x2="4" y2="12" stroke="currentColor" stroke-width="1.5"/></svg>',
+  talk: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="8" rx="2" stroke="currentColor" stroke-width="1.3"/><path d="M5 11v2.5L8 11" stroke="currentColor" stroke-width="1.3"/></svg>',
+  think: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="6" r="4" stroke="currentColor" stroke-width="1.3"/><path d="M6 10.5c0 1.5 1 2.5 2 2.5s2-1 2-2.5" stroke="currentColor" stroke-width="1.3"/><circle cx="7" cy="5.5" r="0.8" fill="currentColor"/><circle cx="9.5" cy="5.5" r="0.8" fill="currentColor"/></svg>',
+  observe: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 8s2.5-4 6-4 6 4 6 4-2.5 4-6 4-6-4-6-4z" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.3"/></svg>',
+};
+
 // HTML entity escaping — prevents XSS from LLM/user text reaching innerHTML
 function escapeHtml(str: string): string {
   return str
@@ -736,6 +751,10 @@ function handleObserve(state: GameState) {
 }
 
 function handleThink(state: GameState) {
+  const mile = state.world.milesWalked;
+  if ((mile - state.player.lastThinkMile) < 5) return;
+
+  state.player.lastThinkMile = mile;
   const prize = state.player.prize;
   const thoughts = [
     `${prize}. That's why you're here. That's why you keep walking.`,
@@ -744,7 +763,7 @@ function handleThink(state: GameState) {
     `Remember: ${prize}. That's the reason. Don't lose the reason.`,
   ];
   addNarrative(state, thoughts[Math.floor(Math.random() * thoughts.length)], 'thought');
-  const boost = Math.max(1, 5 - Math.floor(state.world.milesWalked / 80));
+  const boost = Math.max(1, 5 - Math.floor(mile / 80));
   state.player.morale = Math.min(100, state.player.morale + boost);
 }
 
@@ -983,6 +1002,7 @@ function renderGame(state: GameState) {
   updateSceneOverlay(state);
   updateApproachBanner(state);
   updateCrisisOverlay(state);
+  updateSpeechBubbles(state);
   updateDialogueOverlay(state);
   updateLLMChatOverlay(state);
 
@@ -1019,6 +1039,7 @@ function createGameStructure() {
       <div class="game-controls" id="game-controls"></div>
       <div id="scene-container"></div>
       <div id="approach-container"></div>
+      <div id="speech-bubble-container"></div>
       <div id="crisis-container"></div>
       <div id="dialogue-container"></div>
       <div id="llm-chat-container"></div>
@@ -1338,7 +1359,7 @@ function renderDossier(state: GameState, walkerNum: number): string {
       </div>
       ${factsHtml}
       <div class="dossier-actions">
-        ${canTalk ? '<button class="action-btn dossier-talk-btn" data-action="dossier-talk">Talk</button>' : ''}
+        ${canTalk ? `<button class="action-btn dossier-talk-btn" data-action="dossier-talk"><span class="si si-talk">${ICON.talk}</span>Talk</button>` : ''}
         <button class="action-btn" data-action="dossier-close">Close</button>
       </div>
     </div>
@@ -1416,15 +1437,19 @@ function updateActionsPanel(state: GameState) {
     }
   }
 
+  const thinkDisabled = inCrisis || (state.world.milesWalked - p.lastThinkMile) < 5;
+  const thinkCd = !inCrisis && (state.world.milesWalked - p.lastThinkMile) < 5
+    ? ` (${Math.ceil(5 - (state.world.milesWalked - p.lastThinkMile))}mi)` : '';
+
   const html = `
     <div class="panel-title">ACTIONS</div>
-    <button class="action-btn ${walkerPickerOpen ? 'active' : ''}" data-action="talk" ${talkDisabled ? 'disabled' : ''}>Talk</button>
+    <button class="action-btn ${walkerPickerOpen ? 'active' : ''}" data-action="talk" ${talkDisabled ? 'disabled' : ''}><span class="si si-talk">${ICON.talk}</span>Talk</button>
     ${pickerHtml}
     <button class="action-btn" data-action="food" ${foodDisabled ? 'disabled' : ''}>
-      Request Food ${foodDisabled ? `(${Math.ceil(p.foodCooldown)}m)` : ''}
+      <span class="si si-food">${ICON.food}</span>Food ${foodDisabled ? `(${Math.ceil(p.foodCooldown)}m)` : ''}
     </button>
     <button class="action-btn" data-action="water" ${waterDisabled ? 'disabled' : ''}>
-      Request Water ${waterDisabled ? `(${Math.ceil(p.waterCooldown)}m)` : ''}
+      <span class="si si-water">${ICON.water}</span>Water ${waterDisabled ? `(${Math.ceil(p.waterCooldown)}m)` : ''}
     </button>
     ${shareHtml}
     <button class="action-btn" data-action="pee" ${inCrisis || p.bladder < 20 ? 'disabled' : ''}>
@@ -1433,8 +1458,8 @@ function updateActionsPanel(state: GameState) {
     <button class="action-btn" data-action="poop" ${inCrisis || p.bowel < 20 ? 'disabled' : ''}>
       Poop ${p.bowel >= 20 ? `(2 warnings)` : ''}
     </button>
-    <button class="action-btn" data-action="observe" ${inCrisis ? 'disabled' : ''}>Look Around</button>
-    <button class="action-btn" data-action="think" ${inCrisis ? 'disabled' : ''}>Think About Prize</button>
+    <button class="action-btn" data-action="observe" ${inCrisis ? 'disabled' : ''}><span class="si si-observe">${ICON.observe}</span>Look Around</button>
+    <button class="action-btn" data-action="think" ${thinkDisabled ? 'disabled' : ''}><span class="si si-think">${ICON.think}</span>Prize${thinkCd}</button>
   `;
 
   if (html !== cachedActionsHtml) {
@@ -1483,9 +1508,20 @@ export function handleSceneNext(state: GameState) {
         btn.textContent = 'Continue Walking';
       }
     }
-    // Sync cache so updateSceneOverlay won't rebuild
-    const container = document.getElementById('scene-container');
-    if (container) cachedSceneHtml = container.innerHTML;
+    // Regenerate template HTML to match updateSceneOverlay exactly (prevents cache mismatch blink)
+    cachedSceneHtml = `
+    <div class="scene-overlay">
+      <div class="scene-box" role="dialog" aria-modal="true">
+        <div class="scene-text">${escapeHtml(panel.text)}</div>
+        <div class="scene-footer">
+          <span class="scene-counter">${scene.currentPanel + 1}/${scene.panels.length}</span>
+          ${isLast
+            ? '<button class="scene-btn" data-action="scene-close">Continue Walking</button>'
+            : '<button class="scene-btn" data-action="scene-next">>>> </button>'}
+        </div>
+      </div>
+    </div>
+  `;
   }
 }
 
@@ -1527,6 +1563,7 @@ function handleApproachReply(state: GameState) {
   };
   state.activeApproach = null;
   cachedApproachHtml = '';
+  approachCreated = false;
 }
 
 function handleApproachNod(state: GameState) {
@@ -1539,6 +1576,7 @@ function handleApproachNod(state: GameState) {
   addNarrative(state, `You nod at ${state.activeApproach.walkerName}. They seem satisfied.`, 'narration');
   state.activeApproach = null;
   cachedApproachHtml = '';
+  approachCreated = false;
 }
 
 function handleApproachIgnore(state: GameState) {
@@ -1550,6 +1588,7 @@ function handleApproachIgnore(state: GameState) {
   addNarrative(state, `You keep your eyes ahead. ${state.activeApproach.walkerName} falls back.`, 'narration');
   state.activeApproach = null;
   cachedApproachHtml = '';
+  approachCreated = false;
 }
 
 // --- Scene overlay: cached ---
@@ -1589,16 +1628,19 @@ function updateSceneOverlay(state: GameState) {
   }
 }
 
-// --- Approach banner: cached ---
+// --- Approach banner: stable DOM (create once, update text only) ---
+let approachCreated = false;
+
 function updateApproachBanner(state: GameState) {
   const container = document.getElementById('approach-container');
   if (!container) return;
 
   // Don't show approach during crisis or scene
   if (!state.activeApproach || state.player.activeCrisis || state.activeScene) {
-    if (cachedApproachHtml !== '') {
+    if (cachedApproachHtml !== '' || approachCreated) {
       container.innerHTML = '';
       cachedApproachHtml = '';
+      approachCreated = false;
     }
     return;
   }
@@ -1611,11 +1653,23 @@ function updateApproachBanner(state: GameState) {
     return;
   }
 
-  // Still streaming from LLM
   const displayText = approach.isStreaming
     ? (approach.streamBuffer || '...')
     : approach.text;
 
+  // If banner already exists, just update text (preserves button DOM — no click race)
+  if (approachCreated) {
+    const textEl = container.querySelector('.approach-text');
+    if (textEl) textEl.innerHTML = `"${escapeHtml(displayText)}"`;
+    // Enable Reply button when streaming finishes
+    if (!approach.isStreaming) {
+      const replyBtn = container.querySelector('.approach-reply') as HTMLButtonElement;
+      if (replyBtn && replyBtn.disabled) replyBtn.disabled = false;
+    }
+    return;
+  }
+
+  // First render: create full banner DOM
   const html = `
     <div class="approach-banner">
       <div class="approach-intro">${approach.walkerName} falls into step beside you.</div>
@@ -1628,9 +1682,62 @@ function updateApproachBanner(state: GameState) {
     </div>
   `;
 
-  if (html !== cachedApproachHtml) {
-    container.innerHTML = html;
-    cachedApproachHtml = html;
+  container.innerHTML = html;
+  cachedApproachHtml = html;
+  approachCreated = true;
+}
+
+// --- Speech Bubble System ---
+function updateSpeechBubbles(state: GameState) {
+  const container = document.getElementById('speech-bubble-container');
+  if (!container) return;
+
+  const now = Date.now();
+
+  // Remove expired bubbles
+  state.speechBubbles = state.speechBubbles.filter(b => now - b.startTime < b.duration);
+
+  if (state.speechBubbles.length === 0) {
+    if (container.innerHTML !== '') container.innerHTML = '';
+    return;
+  }
+
+  const bubblesHtml = state.speechBubbles.map(b => {
+    const age = now - b.startTime;
+    const fadeOut = age > b.duration - 600;
+    const cls = `speech-bubble sb-${b.position} sb-${b.type}${fadeOut ? ' sb-fading' : ''}`;
+    return `<div class="${cls}"><div class="sb-speaker">${escapeHtml(b.speaker)}</div><div class="sb-text">${escapeHtml(b.text)}</div></div>`;
+  }).join('');
+
+  container.innerHTML = bubblesHtml;
+}
+
+export function addSpeechBubble(state: GameState, speaker: string, text: string, type: 'overheard' | 'warning_reaction', position: 'left' | 'right', durationMs = 6000) {
+  // Limit to 4 visible bubbles
+  if (state.speechBubbles.length >= 4) {
+    state.speechBubbles.shift();
+  }
+  state.speechBubbles.push({
+    id: state.nextBubbleId++,
+    speaker,
+    text,
+    startTime: Date.now(),
+    duration: durationMs,
+    position,
+    type,
+  });
+}
+
+export function queueOverheardBubbles(state: GameState, lines: Array<{speaker: string, text: string}>) {
+  let delay = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const position: 'left' | 'right' = i % 2 === 0 ? 'left' : 'right';
+    const duration = Math.max(4000, line.text.length * 55);
+    setTimeout(() => {
+      addSpeechBubble(state, line.speaker, line.text, 'overheard', position, duration);
+    }, delay);
+    delay += 2500;
   }
 }
 
@@ -1765,12 +1872,12 @@ function createLLMOverlay(container: HTMLElement, dlg: GameState['llmDialogue'])
   container.innerHTML = `
     <div class="dialogue-overlay" id="llm-overlay-bg">
       <div class="llm-chat-box" role="dialog" aria-modal="true">
+        <button class="chat-close-btn" data-action="close-chat" aria-label="Close">&times;</button>
         <div class="llm-chat-header">
           <div>
             <span class="dialogue-speaker" id="llm-speaker">${escapeHtml(dlg.walkerName)} (#${dlg.walkerId})</span>
             <div style="display:flex;align-items:center;gap:0.3rem;">
               <button class="stop-world-btn" data-action="toggle-pause-chat" id="llm-pause-btn">\u25A0 STOP</button>
-              <button class="speed-btn" data-action="close-chat" aria-label="Close" style="font-size:0.8rem;width:auto;padding:0.2rem 0.5rem;">X</button>
             </div>
           </div>
           <div class="chat-rel-row">
@@ -1848,14 +1955,14 @@ function updateChatSocialActions(state: GameState, walkerId: number) {
 
   const html = `
     <div class="social-actions-row">
-      <button class="social-btn" data-action="chat-share-food" ${foodDisabled ? 'disabled' : ''}>Share Food${foodDisabled ? ` (${Math.ceil(p.foodCooldown)}m)` : ''}</button>
-      <button class="social-btn" data-action="chat-share-water" ${waterDisabled ? 'disabled' : ''}>Share Water${waterDisabled ? ` (${Math.ceil(p.waterCooldown)}m)` : ''}</button>
-      <button class="social-btn" data-action="chat-tell-story" ${storyDisabled ? 'disabled' : ''}>Tell a Story</button>
-      <button class="social-btn" data-action="chat-encourage" ${encourageDisabled ? 'disabled' : ''}>Encourage</button>
-      ${walkTogetherAvail ? `<button class="social-btn ${w.walkingTogether ? 'active' : ''}" data-action="chat-walk-together">${w.walkingTogether ? 'Walking Together \u2713' : 'Walk Together'}</button>` : ''}
-      ${canProposeAlliance ? '<button class="social-btn alliance-btn" data-action="propose-alliance">Propose Alliance</button>' : ''}
-      ${canProposeBond ? '<button class="social-btn bond-btn" data-action="propose-bond">Propose Bond</button>' : ''}
-      ${canBreakAlliance ? '<button class="social-btn break-btn" data-action="break-alliance">Break Alliance</button>' : ''}
+      <button class="social-btn" data-action="chat-share-food" ${foodDisabled ? 'disabled' : ''}><span class="si si-food">${ICON.food}</span>Food${foodDisabled ? ` (${Math.ceil(p.foodCooldown)}m)` : ''}</button>
+      <button class="social-btn" data-action="chat-share-water" ${waterDisabled ? 'disabled' : ''}><span class="si si-water">${ICON.water}</span>Water${waterDisabled ? ` (${Math.ceil(p.waterCooldown)}m)` : ''}</button>
+      <button class="social-btn" data-action="chat-tell-story" ${storyDisabled ? 'disabled' : ''}><span class="si si-story">${ICON.story}</span>Story</button>
+      <button class="social-btn" data-action="chat-encourage" ${encourageDisabled ? 'disabled' : ''}><span class="si si-encourage">${ICON.encourage}</span>Encourage</button>
+      ${walkTogetherAvail ? `<button class="social-btn ${w.walkingTogether ? 'active' : ''}" data-action="chat-walk-together"><span class="si si-walk">${ICON.walk}</span>${w.walkingTogether ? 'Walking \u2713' : 'Walk'}</button>` : ''}
+      ${canProposeAlliance ? `<button class="social-btn alliance-btn" data-action="propose-alliance"><span class="si si-alliance">${ICON.alliance}</span>Alliance</button>` : ''}
+      ${canProposeBond ? `<button class="social-btn bond-btn" data-action="propose-bond"><span class="si si-bond">${ICON.bond}</span>Bond</button>` : ''}
+      ${canBreakAlliance ? `<button class="social-btn break-btn" data-action="break-alliance"><span class="si si-break">${ICON.breakIt}</span>Break</button>` : ''}
     </div>
     ${isEnemy ? `<div class="hostile-actions-row">
       <button class="hostile-btn" data-action="hostile-taunt">Taunt</button>
