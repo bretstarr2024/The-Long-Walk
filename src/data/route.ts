@@ -32,8 +32,21 @@ export const CROWD_PHASES: CrowdPhase[] = [
 ];
 
 export function getRouteSegment(mile: number): RouteSegment {
-  return ROUTE_SEGMENTS.find(s => mile >= s.startMile && mile < s.endMile)
-    ?? ROUTE_SEGMENTS[ROUTE_SEGMENTS.length - 1];
+  // Binary search — ROUTE_SEGMENTS is sorted by startMile, called ~360 times/frame from terrain strip
+  let lo = 0;
+  let hi = ROUTE_SEGMENTS.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >>> 1; // ceil division to avoid infinite loop
+    if (ROUTE_SEGMENTS[mid].startMile <= mile) {
+      lo = mid;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  const seg = ROUTE_SEGMENTS[lo];
+  // Verify mile falls within segment range; fallback to last segment if past all
+  if (mile >= seg.startMile && mile < seg.endMile) return seg;
+  return ROUTE_SEGMENTS[ROUTE_SEGMENTS.length - 1];
 }
 
 export function getCrowdPhase(mile: number): CrowdPhase {

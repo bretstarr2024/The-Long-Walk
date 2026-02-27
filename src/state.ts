@@ -140,26 +140,57 @@ export function getWalkerData(state: GameState, num: number): WalkerData | undef
   return walkerDataMap.get(num);
 }
 
+// O(1) walker state lookup map — rebuilt when elimination count changes
+let walkerStateMap: Map<number, WalkerState> | null = null;
+let walkerStateMapVersion = 0;
+
 export function getWalkerState(state: GameState, num: number): WalkerState | undefined {
-  return state.walkers.find(w => w.walkerNumber === num);
+  // Rebuild map when elimination count changes (walker.alive changes)
+  if (!walkerStateMap || walkerStateMapVersion !== state.eliminationCount) {
+    walkerStateMap = new Map(state.walkers.map(w => [w.walkerNumber, w]));
+    walkerStateMapVersion = state.eliminationCount;
+  }
+  return walkerStateMap.get(num);
 }
 
+// getNearbyWalkers cache — invalidated when position or elimination count changes
+let nearbyCache: WalkerState[] | null = null;
+let nearbyCachePosition: string | null = null;
+let nearbyCacheElimCount = -1;
+
 export function getNearbyWalkers(state: GameState): WalkerState[] {
+  // Return cached result if position and elimination count haven't changed
+  if (nearbyCache !== null && nearbyCachePosition === state.player.position && nearbyCacheElimCount === state.eliminationCount) {
+    return nearbyCache;
+  }
+
   const atPosition = state.walkers.filter(w =>
     w.alive && w.position === state.player.position
   );
   // Sort by tier so Tier 1 characters appear first
   const tierOf = (w: WalkerState) => getWalkerData(state, w.walkerNumber)?.tier ?? 3;
-  return atPosition.sort((a, b) => tierOf(a) - tierOf(b));
+  nearbyCache = atPosition.sort((a, b) => tierOf(a) - tierOf(b));
+  nearbyCachePosition = state.player.position;
+  nearbyCacheElimCount = state.eliminationCount;
+  return nearbyCache;
 }
 
 /** Reset walker data map (for headless testing) */
 export function resetWalkerDataMap() {
   walkerDataMap = null;
+  nearbyCache = null;
+  nearbyCachePosition = null;
+  nearbyCacheElimCount = -1;
+}
+
+/** Reset walker state map (for headless testing) */
+export function resetWalkerStateMap() {
+  walkerStateMap = null;
+  walkerStateMapVersion = 0;
 }
 
 export function getWalkersRemaining(state: GameState): number {
-  return state.walkers.filter(w => w.alive).length + (state.player.alive ? 1 : 0);
+  return (state.walkers.length - state.eliminationCount) + (state.player.alive ? 1 : 0);
 }
 
 export function getRelationshipTier(w: WalkerState): RelationshipTier {
@@ -180,9 +211,10 @@ export function addNarrative(state: GameState, text: string, type: import('./typ
     text,
     type,
   });
-  // Keep log from growing unbounded
-  if (state.narrativeLog.length > 200) {
-    state.narrativeLog = state.narrativeLog.slice(-150);
+  // Keep log from growing unbounded — high thresholds reduce rebuild frequency
+  // (trimming resets renderedNarrativeCount in ui.ts causing a full panel rebuild)
+  if (state.narrativeLog.length > 500) {
+    state.narrativeLog = state.narrativeLog.slice(-400);
   }
 }
 

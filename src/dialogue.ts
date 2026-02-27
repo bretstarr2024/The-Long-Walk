@@ -3,7 +3,7 @@
 // ============================================================
 
 import { GameState, DialogueNode, DialogueOption, DialogueInstance, WalkerState } from './types';
-import { addNarrative, getWalkerData, getWalkerState, getNearbyWalkers } from './state';
+import { addNarrative, getWalkerData, getWalkerState, getWalkersRemaining, getNearbyWalkers } from './state';
 
 // ============================================================
 // DIALOGUE ENGINE
@@ -31,15 +31,14 @@ function evaluateConditions(state: GameState, node: DialogueNode, w: WalkerState
   if (c.mileRange && (mile < c.mileRange[0] || mile > c.mileRange[1])) return false;
   if (c.relationshipMin !== undefined && w.relationship < c.relationshipMin) return false;
   if (c.walkerAlive !== undefined) {
-    const target = state.walkers.find(ws => ws.walkerNumber === c.walkerAlive);
+    const target = getWalkerState(state, c.walkerAlive);
     if (!target || !target.alive) return false;
   }
   if (c.flagRequired && !state.player.flags[c.flagRequired]) return false;
   if (c.flagAbsent && state.player.flags[c.flagAbsent]) return false;
   if (c.clarityMin !== undefined && state.player.clarity < c.clarityMin) return false;
   if (c.maxWalkersRemaining !== undefined) {
-    const alive = state.walkers.filter(w => w.alive).length + 1;
-    if (alive > c.maxWalkersRemaining) return false;
+    if (getWalkersRemaining(state) > c.maxWalkersRemaining) return false;
   }
   if (c.playerPosition && state.player.position !== c.playerPosition) return false;
   if (c.playerReason && state.player.reason !== c.playerReason) return false;

@@ -6,6 +6,7 @@
 import { GameState, WalkerState } from './types';
 import { getRouteSegment, getCrowdPhase } from './data/route';
 import { getPositionTransition } from './engine';
+import { getWalkerData } from './state';
 
 // ============================================================
 // THERMAL COLOR PALETTE (ironbow)
@@ -92,6 +93,9 @@ function walkerHeat(w: WalkerState, tier: number): number {
 }
 
 // Draw a soft radial heat blob (used with additive blending)
+// Note: Gradients are intentionally not cached — canvas radial gradients are
+// position-dependent (x, y, radius), so caching by heat bucket alone is not
+// possible without decoupling position from gradient creation.
 function drawHeatBlob(
   ctx: CanvasRenderingContext2D,
   x: number, y: number,
@@ -119,14 +123,22 @@ function drawHeatBlob(
 let noiseCanvas: HTMLCanvasElement | null = null;
 let noiseFrame = 0;
 
+// Pre-rendered scan line overlay (rebuilt only when dimensions change)
+let scanlineCanvas: HTMLCanvasElement | null = null;
+let scanlineW = 0;
+let scanlineH = 0;
+
 function getNoiseTexture(w: number, h: number): HTMLCanvasElement {
   // Regenerate every ~90 frames for animated grain
   if (noiseCanvas && noiseCanvas.width === w && noiseCanvas.height === h && frameCounter - noiseFrame < 90) {
     return noiseCanvas;
   }
-  noiseCanvas = document.createElement('canvas');
-  noiseCanvas.width = w;
-  noiseCanvas.height = h;
+  // Reuse existing canvas if dimensions match, only create new one if needed
+  if (!noiseCanvas || noiseCanvas.width !== w || noiseCanvas.height !== h) {
+    noiseCanvas = document.createElement('canvas');
+    noiseCanvas.width = w;
+    noiseCanvas.height = h;
+  }
   noiseFrame = frameCounter;
   const nctx = noiseCanvas.getContext('2d')!;
   const imgData = nctx.createImageData(w, h);
@@ -149,9 +161,11 @@ function getNoiseTexture(w: number, h: number): HTMLCanvasElement {
 let frameCounter = 0;
 let tooltipWalker: { name: string; status: string; x: number; y: number } | null = null;
 
-// Cached lookup map: walkerNumber → WalkerData (rebuilt when length changes)
-let walkerDataMap: Map<number, import('./types').WalkerData> | null = null;
-let walkerDataMapSize = 0;
+// Cached canvas dimensions from ResizeObserver (avoids getBoundingClientRect per frame)
+let cachedCanvasWidth = 0;
+let cachedCanvasHeight = 0;
+let canvasResizeObserver: ResizeObserver | null = null;
+
 
 // ============================================================
 // INIT
@@ -172,6 +186,21 @@ export function initVisualization(canvas: HTMLCanvasElement) {
     (canvas as any)._mouseY = -1;
     tooltipWalker = null;
   });
+
+  // Cache canvas dimensions via ResizeObserver (avoids getBoundingClientRect per frame)
+  if (canvasResizeObserver) canvasResizeObserver.disconnect();
+  canvasResizeObserver = new ResizeObserver((entries) => {
+    for (const entry of entries) {
+      cachedCanvasWidth = entry.contentRect.width;
+      cachedCanvasHeight = entry.contentRect.height;
+    }
+  });
+  canvasResizeObserver.observe(canvas);
+
+  // Seed initial values from getBoundingClientRect (observer callback is async)
+  const initRect = canvas.getBoundingClientRect();
+  cachedCanvasWidth = initRect.width;
+  cachedCanvasHeight = initRect.height;
 }
 
 // ============================================================
@@ -183,9 +212,11 @@ export function updateVisualization(state: GameState, canvas: HTMLCanvasElement)
   if (!ctx) return;
 
   // Sync canvas buffer to display size with DPI scaling (sharp on Retina)
-  const rect = canvas.getBoundingClientRect();
-  const displayW = Math.floor(rect.width);
-  const displayH = Math.floor(rect.height);
+  // Use cached dimensions from ResizeObserver; fallback to getBoundingClientRect if not yet set
+  const rawW = cachedCanvasWidth || canvas.getBoundingClientRect().width;
+  const rawH = cachedCanvasHeight || canvas.getBoundingClientRect().height;
+  const displayW = Math.floor(rawW);
+  const displayH = Math.floor(rawH);
   const dpr = window.devicePixelRatio || 1;
   const bufferW = Math.floor(displayW * dpr);
   const bufferH = Math.floor(displayH * dpr);
@@ -332,16 +363,9 @@ export function updateVisualization(state: GameState, canvas: HTMLCanvasElement)
   // --- Alive walkers: thermal signatures ---
   tooltipWalker = null;
 
-  // Build walkerData lookup map once (avoids O(n) find per walker per frame)
-  if (!walkerDataMap || walkerDataMapSize !== state.walkerData.length) {
-    walkerDataMap = new Map();
-    for (const d of state.walkerData) walkerDataMap.set(d.walkerNumber, d);
-    walkerDataMapSize = state.walkerData.length;
-  }
-
   for (const w of state.walkers) {
     if (!w.alive) continue;
-    const data = walkerDataMap.get(w.walkerNumber);
+    const data = getWalkerData(state, w.walkerNumber);
     if (!data) continue;
 
     const band = positionBand(w.position);
@@ -472,11 +496,20 @@ export function updateVisualization(state: GameState, canvas: HTMLCanvasElement)
   const noise = getNoiseTexture(W, H);
   ctx.drawImage(noise, 0, 0, W, H);
 
-  // --- Scan lines ---
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
-  for (let sy = 0; sy < H; sy += 3) {
-    ctx.fillRect(0, sy, W, 1);
+  // --- Scan lines (pre-rendered offscreen, rebuilt only on resize) ---
+  if (!scanlineCanvas || scanlineW !== W || scanlineH !== H) {
+    scanlineCanvas = document.createElement('canvas');
+    scanlineCanvas.width = W;
+    scanlineCanvas.height = H;
+    scanlineW = W;
+    scanlineH = H;
+    const slCtx = scanlineCanvas.getContext('2d')!;
+    slCtx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+    for (let sy = 0; sy < H; sy += 3) {
+      slCtx.fillRect(0, sy, W, 1);
+    }
   }
+  ctx.drawImage(scanlineCanvas, 0, 0, W, H);
 
   // --- Terrain elevation strip (left edge, ±10 miles) ---
   {
@@ -679,7 +712,7 @@ export function updateVisualization(state: GameState, canvas: HTMLCanvasElement)
   // --- Tier 1 walker name labels ---
   for (const w of state.walkers) {
     if (!w.alive) continue;
-    const data = walkerDataMap!.get(w.walkerNumber);
+    const data = getWalkerData(state, w.walkerNumber);
     if (!data || data.tier !== 1) continue;
 
     const band = positionBand(w.position);

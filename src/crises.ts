@@ -4,7 +4,8 @@
 // ============================================================
 
 import { GameState, ActiveCrisis, CrisisOption, CrisisType, CrisisEffects, TempEffect } from './types';
-import { addNarrative, getWalkerData } from './state';
+import { addNarrative, getWalkerData, getWalkerState } from './state';
+import { issueWarning } from './engine';
 
 // ============================================================
 // CONFIG
@@ -35,7 +36,7 @@ export function resetCrisisGlobals() {
 
 function getAllyNearby(state: GameState): number | null {
   for (const allyNum of state.player.alliances) {
-    const w = state.walkers.find(ws => ws.walkerNumber === allyNum);
+    const w = getWalkerState(state, allyNum);
     if (w && w.alive && w.position === state.player.position) return allyNum;
   }
   return null;
@@ -885,7 +886,7 @@ export function resolveCrisis(state: GameState, optionId: string) {
   if (option.requiresAlly && !getAllyNearby(state)) return;
 
   applyEffects(state, option.effects, crisis.targetWalker);
-  addNarrative(state, option.narrative, 'narration');
+  if (option.narrative) addNarrative(state, option.narrative, 'narration');
 
   // Special: blister medical burns food cooldown
   if (crisis.type === 'blister_burst' && optionId === 'medical') {
@@ -927,7 +928,7 @@ export function resolveCrisis(state: GameState, optionId: string) {
   }
   // Special: supply interference — retaliate
   if (crisis.type === 'enemy_supply_interference' && optionId === 'retaliate') {
-    const enemy = crisis.targetWalker ? state.walkers.find(w => w.walkerNumber === crisis.targetWalker) : null;
+    const enemy = crisis.targetWalker ? getWalkerState(state, crisis.targetWalker) ?? null : null;
     if (enemy && enemy.warnings < 2) {
       enemy.warnings = Math.min(2, enemy.warnings + 1);
       const eName = getWalkerData(state, enemy.walkerNumber)?.name || `Walker #${enemy.walkerNumber}`;
@@ -946,7 +947,7 @@ export function resolveCrisis(state: GameState, optionId: string) {
   }
   // Special: supply interference — report gives enemy a warning
   if (crisis.type === 'enemy_supply_interference' && optionId === 'report') {
-    const enemy = crisis.targetWalker ? state.walkers.find(w => w.walkerNumber === crisis.targetWalker) : null;
+    const enemy = crisis.targetWalker ? getWalkerState(state, crisis.targetWalker) ?? null : null;
     if (enemy && enemy.warnings < 2) {
       enemy.warnings = Math.min(2, enemy.warnings + 1);
     }
@@ -971,7 +972,7 @@ function timeoutCrisis(state: GameState) {
   if (!crisis) return;
 
   applyEffects(state, crisis.defaultEffects, crisis.targetWalker);
-  addNarrative(state, crisis.defaultNarrative, 'warning');
+  if (crisis.defaultNarrative) addNarrative(state, crisis.defaultNarrative, 'warning');
   state.player.activeCrisis = null;
   state.lastCrisisResolveMile = state.world.milesWalked;
 }
@@ -991,25 +992,9 @@ function applyEffects(state: GameState, effects: CrisisEffects, targetWalker?: n
   if (effects.hunger) p.hunger = Math.max(0, Math.min(100, p.hunger + effects.hunger));
   if (effects.clarity) p.clarity = Math.max(0, Math.min(100, p.clarity + effects.clarity));
 
-  // Warning risk — issue through proper warning pipeline
+  // Warning risk — route through canonical issueWarning() for consistent behavior
   if (effects.warningRisk && Math.random() < effects.warningRisk) {
-    p.warnings = Math.min(3, p.warnings + 1);
-    // Sync cooldown/tracking state so normal warning system doesn't double-punish
-    p.lastWarningTime = state.world.hoursElapsed;
-    p.slowAccum = 0;
-    state.lastWarningMile = state.world.milesWalked;
-    if (p.warnings >= 3) {
-      p.alive = false;
-      state.screen = 'gameover';
-      addNarrative(state, `"Warning! Warning 100! Third warning, 100!" The soldiers' rifles come up.`, 'elimination');
-      addNarrative(state, `Walker #100 — ${p.name} — ELIMINATED. Mile ${Math.round(state.world.milesWalked)}.`, 'elimination');
-    } else {
-      const warnText = p.warnings === 1
-        ? '"Warning! Warning 100!"'
-        : '"Warning! Second warning, 100!"';
-      addNarrative(state, warnText, 'warning');
-      p.morale = Math.max(0, p.morale - 10);
-    }
+    issueWarning(state);
   }
 
   // Speed override (temp effect)
@@ -1033,7 +1018,7 @@ function applyEffects(state: GameState, effects: CrisisEffects, targetWalker?: n
   // Ally effects
   const allyNum = targetWalker || getAllyNearby(state);
   if (allyNum) {
-    const w = state.walkers.find(ws => ws.walkerNumber === allyNum);
+    const w = getWalkerState(state, allyNum);
     if (w) {
       if (effects.allyStamina) w.stamina = Math.max(0, Math.min(100, w.stamina + effects.allyStamina));
       if (effects.allyMorale) w.morale = Math.max(0, Math.min(100, w.morale + effects.allyMorale));
@@ -1065,11 +1050,16 @@ function applyEffects(state: GameState, effects: CrisisEffects, targetWalker?: n
         }
       }
 
-      // Break alliance
+      // Break alliance — match engine's breakAlliance() behavior
       if (effects.breakAlliance) {
         w.isAlliedWithPlayer = false;
-        w.relationship = 0;
+        w.relationship = -41; // Below -40 threshold so getRelationshipTier() returns 'enemy'
+        w.isEnemy = true;
+        w.walkingTogether = false;
         p.alliances = p.alliances.filter(n => n !== w.walkerNumber);
+        if (!p.enemies.includes(w.walkerNumber)) {
+          p.enemies.push(w.walkerNumber);
+        }
       }
     }
   }

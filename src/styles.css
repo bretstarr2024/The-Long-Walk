@@ -28,6 +28,7 @@
   --elimination-flash: rgba(224, 64, 64, 0.15);
   --font-mono: 'IBM Plex Mono', 'Courier New', monospace;
   --font-narrative: 'Libre Baskerville', Georgia, serif;
+  --border-dim: #1e2230;
   --hallucination-hue: 0deg;
   --hallucination-intensity: 0;
   --screen-shake: 0px;
@@ -986,8 +987,10 @@ html, body {
 
 .llm-chat-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
+  gap: 0.4rem;
   padding: 0.75rem 1rem;
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
@@ -1372,7 +1375,8 @@ html, body {
   }
 
   .game-bottom {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto;
     max-height: 60vh;
   }
 
@@ -1386,6 +1390,28 @@ html, body {
     border-top: 1px solid var(--border-color);
     flex-direction: row;
     flex-wrap: wrap;
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 700px) {
+  .game-bottom {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto;
+  }
+
+  .status-panel {
+    border-right: none;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .walkers-panel {
+    border-right: none;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .actions-panel {
+    grid-column: auto;
   }
 }
 
@@ -1811,4 +1837,42 @@ html, body {
 
 .dossier-talk-btn:hover {
   background: rgba(64, 128, 208, 0.1) !important;
+}
+
+/* ============================================================
+   REDUCED MOTION — Accessibility
+   ============================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .scene-text {
+    animation: none !important;
+  }
+
+  .approach-banner {
+    animation: none !important;
+  }
+
+  .crisis-overlay {
+    animation: none !important;
+  }
+
+  .scene-overlay {
+    animation: none !important;
+  }
+
+  .hallucination-active {
+    animation: none !important;
+  }
+
+  .warning-flash {
+    animation: none !important;
+  }
 }

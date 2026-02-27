@@ -37,6 +37,9 @@ async function init() {
     if (!isAudioInitialized()) {
       initAudio();
       console.log('[Main] Audio initialized on user gesture');
+      // Remove listeners after init — ensureResumed no longer needed as click handlers
+      document.removeEventListener('click', startAudio);
+      document.removeEventListener('keydown', startAudio);
     }
     ensureResumed();
   };
@@ -204,6 +207,9 @@ document.addEventListener('keydown', (e) => {
     const idx = parseInt(e.key) - 1;
     if (idx < crisis.options.length) {
       resolveCrisis(state, crisis.options[idx].id);
+      // Clear crisis DOM immediately (same pattern as click handler in ui.ts)
+      const container = document.getElementById('crisis-container');
+      if (container) container.innerHTML = '';
     }
     return;
   }

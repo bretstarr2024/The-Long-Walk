@@ -4,7 +4,7 @@
 // ============================================================
 
 import { GameState } from './types';
-import { addNarrative, getWalkerData, getWalkerState } from './state';
+import { addNarrative, getWalkerData, getWalkerState, getWalkersRemaining } from './state';
 import { requestOverhear, type WalkerProfile, type GameContextForAgent } from './agentClient';
 import { NPC_RELATIONSHIPS } from './data/walkers';
 
@@ -93,7 +93,7 @@ function buildGameContext(state: GameState): GameContextForAgent {
     crowdMood: state.world.crowdMood,
     currentAct: state.world.currentAct,
     horrorTier: state.world.horrorTier,
-    walkersRemaining: state.walkers.filter(w => w.alive).length + 1,
+    walkersRemaining: getWalkersRemaining(state),
     playerName: state.player.name,
     playerWarnings: state.player.warnings,
     playerMorale: Math.round(state.player.morale),

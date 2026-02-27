@@ -6,6 +6,7 @@
 import 'dotenv/config';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { bodyLimit } from 'hono/body-limit';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { readFileSync } from 'fs';
@@ -25,8 +26,53 @@ if (!apiKey) {
 }
 setDefaultOpenAIKey(apiKey);
 
+// --- Rate Limiter ---
+// Simple in-memory rate limiter: Map<ip, timestamp[]>
+const rateLimitStore = new Map<string, number[]>();
+
+function rateLimit(maxRequests: number, windowMs: number) {
+  return async (c: any, next: () => Promise<void>) => {
+    const ip = c.req.header('x-forwarded-for') || c.req.header('x-real-ip') || 'unknown';
+    const now = Date.now();
+    const key = `${ip}:${c.req.path}`;
+
+    let timestamps = rateLimitStore.get(key) || [];
+    // Prune timestamps outside the window
+    timestamps = timestamps.filter((t) => now - t < windowMs);
+
+    if (timestamps.length >= maxRequests) {
+      return c.json({ error: 'Too many requests' }, 429);
+    }
+
+    timestamps.push(now);
+    rateLimitStore.set(key, timestamps);
+    await next();
+  };
+}
+
+// Periodically clean up stale entries (every 5 minutes)
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, timestamps] of rateLimitStore) {
+    const fresh = timestamps.filter((t) => now - t < 60_000);
+    if (fresh.length === 0) {
+      rateLimitStore.delete(key);
+    } else {
+      rateLimitStore.set(key, fresh);
+    }
+  }
+}, 5 * 60 * 1000);
+
 // --- Hono App ---
 const app = new Hono();
+
+// Security headers middleware
+app.use('*', async (c, next) => {
+  await next();
+  c.res.headers.set('X-Content-Type-Options', 'nosniff');
+  c.res.headers.set('X-Frame-Options', 'DENY');
+  c.res.headers.set('Referrer-Policy', 'no-referrer');
+});
 
 // CORS for Vite dev server — restrict to known origins
 const ALLOWED_ORIGINS = new Set([
@@ -39,15 +85,100 @@ if (process.env.RAILWAY_PUBLIC_DOMAIN) {
   ALLOWED_ORIGINS.add(`https://${process.env.RAILWAY_PUBLIC_DOMAIN}`);
 }
 app.use('*', cors({
-  origin: (origin) => ALLOWED_ORIGINS.has(origin) ? origin : 'http://localhost:5173',
+  origin: (origin) => ALLOWED_ORIGINS.has(origin) ? origin : null,
   allowMethods: ['GET', 'POST', 'OPTIONS'],
   allowHeaders: ['Content-Type'],
 }));
+
+// Body size limit for API routes (50 KB)
+app.use('/api/*', bodyLimit({ maxSize: 50 * 1024 }));
+
+// Rate limiting per endpoint
+app.use('/api/chat/*', rateLimit(10, 60_000));
+app.use('/api/overhear', rateLimit(5, 60_000));
+app.use('/api/approach', rateLimit(5, 60_000));
 
 // Health check
 app.get('/api/health', (c) => {
   return c.json({ status: 'ok', model: 'gpt-5.2-chat-latest' });
 });
+
+// --- Shared SSE response helper ---
+// Deduplicates the ReadableStream + SSE iteration pattern used by all 3 endpoints
+function createSSEResponse(
+  agentOrRun: Agent,
+  inputItems: any[],
+  options?: {
+    effects?: GameEffect[];
+    walkerId?: number;
+    onSuccess?: (fullText: string) => void;
+    onError?: () => void;
+    errorMessage?: string;
+  },
+): Response {
+  const { effects, walkerId, onSuccess, onError, errorMessage = 'Agent failed' } = options || {};
+
+  return new Response(
+    new ReadableStream({
+      async start(controller) {
+        const encoder = new TextEncoder();
+        const send = (event: string, data: string) => {
+          controller.enqueue(encoder.encode(`event: ${event}\ndata: ${data}\n\n`));
+        };
+
+        try {
+          const result = await run(agentOrRun, inputItems as any, { stream: true });
+
+          let fullText = '';
+
+          for await (const event of result) {
+            if (event.type === 'raw_model_stream_event') {
+              const data = event.data as any;
+              if (data?.type === 'output_text_delta' && data.delta) {
+                fullText += data.delta;
+                send('token', JSON.stringify({ text: data.delta }));
+              }
+            }
+          }
+
+          await result.completed;
+
+          // Send any accumulated game effects from tool calls
+          if (effects) {
+            for (const effect of effects) {
+              if (walkerId !== undefined) {
+                effect.walkerId = walkerId;
+              }
+              send('effect', JSON.stringify(effect));
+            }
+          }
+
+          // Invoke success callback (e.g. record history)
+          if (onSuccess) {
+            onSuccess(fullText);
+          }
+
+          send('done', JSON.stringify({ text: fullText }));
+          controller.close();
+        } catch (err: any) {
+          console.error(`[Server] SSE error:`, err);
+          if (onError) {
+            onError();
+          }
+          send('error', JSON.stringify({ error: errorMessage }));
+          controller.close();
+        }
+      },
+    }),
+    {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      },
+    }
+  );
+}
 
 // --- Chat endpoint (SSE streaming) ---
 interface ChatRequest {
@@ -69,6 +200,16 @@ app.post('/api/chat/:walkerId', async (c) => {
 
   if (!message || !walker || !gameContext) {
     return c.json({ error: 'Missing message, walker, or gameContext' }, 400);
+  }
+
+  // Message length validation
+  if (message.length > 1000) {
+    return c.json({ error: 'Message too long (max 1000 characters)' }, 400);
+  }
+
+  // Player name validation
+  if (gameContext.playerName && gameContext.playerName.length > 50) {
+    return c.json({ error: 'Player name too long (max 50 characters)' }, 400);
   }
 
   // Create request-scoped effects accumulator + tools (closure-bound, no shared state)
@@ -99,64 +240,19 @@ app.post('/api/chat/:walkerId', async (c) => {
   addToHistory(walkerId, 'user', message);
 
   // Stream response via SSE
-  return new Response(
-    new ReadableStream({
-      async start(controller) {
-        const encoder = new TextEncoder();
-        const send = (event: string, data: string) => {
-          controller.enqueue(encoder.encode(`event: ${event}\ndata: ${data}\n\n`));
-        };
-
-        try {
-          const result = await run(agent, inputItems as any, { stream: true });
-
-          let fullText = '';
-
-          // Iterate stream events to extract text
-          for await (const event of result) {
-            if (event.type === 'raw_model_stream_event') {
-              const data = event.data as any;
-              // The Agents SDK emits 'output_text_delta' (not 'response.output_text.delta')
-              if (data?.type === 'output_text_delta' && data.delta) {
-                fullText += data.delta;
-                send('token', JSON.stringify({ text: data.delta }));
-              }
-            }
-          }
-
-          // Stream iteration completes when done
-          await result.completed;
-
-          // Send any accumulated game effects from tool calls
-          for (const effect of effects) {
-            effect.walkerId = walkerId;
-            send('effect', JSON.stringify(effect));
-          }
-
-          // Record agent response in history
-          if (fullText) {
-            addToHistory(walkerId, 'assistant', fullText);
-          }
-
-          send('done', JSON.stringify({ text: fullText }));
-          controller.close();
-        } catch (err: any) {
-          console.error(`[Server] Agent error for walker ${walkerId}:`, err.message || err);
-          // Roll back the user message we added before the agent call
-          removeLastHistory(walkerId);
-          send('error', JSON.stringify({ error: err.message || 'Agent failed' }));
-          controller.close();
-        }
-      },
-    }),
-    {
-      headers: {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-      },
-    }
-  );
+  return createSSEResponse(agent, inputItems, {
+    effects,
+    walkerId,
+    onSuccess: (fullText) => {
+      if (fullText) {
+        addToHistory(walkerId, 'assistant', fullText);
+      }
+    },
+    onError: () => {
+      removeLastHistory(walkerId);
+    },
+    errorMessage: 'Agent failed',
+  });
 });
 
 // --- Overhear endpoint (two walkers talking to each other) ---
@@ -173,6 +269,11 @@ app.post('/api/overhear', async (c) => {
 
   if (!walkerA || !walkerB || !gameContext || !scenePrompt) {
     return c.json({ error: 'Missing walkerA, walkerB, gameContext, or scenePrompt' }, 400);
+  }
+
+  // Scene prompt length validation
+  if (scenePrompt.length > 500) {
+    return c.json({ error: 'Scene prompt too long (max 500 characters)' }, 400);
   }
 
   const contextBlock = buildGameContextBlock(gameContext, true); // skip walker state for overhear
@@ -214,53 +315,17 @@ ${contextBlock}
     },
   });
 
-  return new Response(
-    new ReadableStream({
-      async start(controller) {
-        const encoder = new TextEncoder();
-        const send = (event: string, data: string) => {
-          controller.enqueue(encoder.encode(`event: ${event}\ndata: ${data}\n\n`));
-        };
-
-        try {
-          const result = await run(overhearAgent, [
-            {
-              type: 'message' as const,
-              role: 'user' as const,
-              content: [{ type: 'input_text' as const, text: `Generate the overheard conversation between ${walkerA.name} and ${walkerB.name}.` }],
-            },
-          ], { stream: true });
-
-          let fullText = '';
-
-          for await (const event of result) {
-            if (event.type === 'raw_model_stream_event') {
-              const data = event.data as any;
-              if (data?.type === 'output_text_delta' && data.delta) {
-                fullText += data.delta;
-                send('token', JSON.stringify({ text: data.delta }));
-              }
-            }
-          }
-
-          await result.completed;
-          send('done', JSON.stringify({ text: fullText }));
-          controller.close();
-        } catch (err: any) {
-          console.error(`[Server] Overhear error:`, err.message || err);
-          send('error', JSON.stringify({ error: err.message || 'Overhear failed' }));
-          controller.close();
-        }
-      },
-    }),
+  const inputItems = [
     {
-      headers: {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-      },
-    }
-  );
+      type: 'message' as const,
+      role: 'user' as const,
+      content: [{ type: 'input_text' as const, text: `Generate the overheard conversation between ${walkerA.name} and ${walkerB.name}.` }],
+    },
+  ];
+
+  return createSSEResponse(overhearAgent, inputItems, {
+    errorMessage: 'Overhear failed',
+  });
 });
 
 // --- Approach endpoint (NPC initiates conversation with player) ---
@@ -277,6 +342,11 @@ app.post('/api/approach', async (c) => {
 
   if (!walker || !gameContext || !approachType || !approachContext) {
     return c.json({ error: 'Missing walker, gameContext, approachType, or approachContext' }, 400);
+  }
+
+  // Approach context length validation
+  if (approachContext.length > 500) {
+    return c.json({ error: 'Approach context too long (max 500 characters)' }, 400);
   }
 
   const contextBlock = buildGameContextBlock(gameContext);
@@ -318,59 +388,31 @@ Context: ${approachContext}
     },
   });
 
-  return new Response(
-    new ReadableStream({
-      async start(controller) {
-        const encoder = new TextEncoder();
-        const send = (event: string, data: string) => {
-          controller.enqueue(encoder.encode(`event: ${event}\ndata: ${data}\n\n`));
-        };
-
-        try {
-          const result = await run(approachAgent, [
-            {
-              type: 'message' as const,
-              role: 'user' as const,
-              content: [{ type: 'input_text' as const, text: `[NPC INITIATES CONVERSATION]\nYou see Walker #100 (${gameContext.playerName}) nearby. You want to say something to them.\nContext: ${approachContext}\nSpeak first. 1-2 sentences. Stay in character.` }],
-            },
-          ], { stream: true });
-
-          let fullText = '';
-
-          for await (const event of result) {
-            if (event.type === 'raw_model_stream_event') {
-              const data = event.data as any;
-              if (data?.type === 'output_text_delta' && data.delta) {
-                fullText += data.delta;
-                send('token', JSON.stringify({ text: data.delta }));
-              }
-            }
-          }
-
-          await result.completed;
-          send('done', JSON.stringify({ text: fullText }));
-          controller.close();
-        } catch (err: any) {
-          console.error(`[Server] Approach error for ${walker.name}:`, err.message || err);
-          send('error', JSON.stringify({ error: err.message || 'Approach failed' }));
-          controller.close();
-        }
-      },
-    }),
+  const inputItems = [
     {
-      headers: {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-      },
-    }
-  );
+      type: 'message' as const,
+      role: 'user' as const,
+      content: [{ type: 'input_text' as const, text: `[NPC INITIATES CONVERSATION]\nYou see Walker #100 (${gameContext.playerName}) nearby. You want to say something to them.\nContext: ${approachContext}\nSpeak first. 1-2 sentences. Stay in character.` }],
+    },
+  ];
+
+  return createSSEResponse(approachAgent, inputItems, {
+    errorMessage: 'Approach failed',
+  });
 });
 
 // --- Static file serving (production) ---
 if (process.env.NODE_ENV === 'production' || process.env.RAILWAY_ENVIRONMENT) {
   app.use('/*', serveStatic({ root: './dist' }));
-  const indexHtml = readFileSync('./dist/index.html', 'utf-8');
+
+  let indexHtml: string;
+  try {
+    indexHtml = readFileSync('./dist/index.html', 'utf-8');
+  } catch (err) {
+    console.error('[Server] Failed to read dist/index.html:', err);
+    indexHtml = '<!DOCTYPE html><html><head><title>The Long Walk</title></head><body><p>Application failed to load. Please try again later.</p></body></html>';
+  }
+
   app.get('*', (c) => {
     if (c.req.path.startsWith('/api/')) {
       return c.json({ error: 'Not found' }, 404);

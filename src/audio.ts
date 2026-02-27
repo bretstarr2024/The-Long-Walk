@@ -510,6 +510,7 @@ export function playWarningBuzzer() {
     osc2.start(t);
     osc1.stop(t + 0.2);
     osc2.stop(t + 0.2);
+    osc1.onended = () => { osc1.disconnect(); osc2.disconnect(); buzzGain.disconnect(); };
   }
 }
 

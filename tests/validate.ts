@@ -5,7 +5,7 @@
 
 import { ALL_WALKERS, NPC_RELATIONSHIPS } from '../src/data/walkers';
 import { ROUTE_SEGMENTS, CROWD_PHASES, AMBIENT_DESCRIPTIONS } from '../src/data/route';
-import { createInitialGameState, getAliveWalkers, getRelationshipTier } from '../src/state';
+import { createInitialGameState, getAliveWalkers, getWalkerState, getRelationshipTier, resetWalkerStateMap } from '../src/state';
 import { gameTick, resetEngineGlobals, requestFood, requestWater } from '../src/engine';
 import { checkScriptedEvents, checkOverheards, checkHallucinations, checkAbsenceEffects, checkEnding } from '../src/narrative';
 import { resolveCrisis, resetCrisisGlobals } from '../src/crises';
@@ -256,6 +256,7 @@ function runHeadlessSimulation(opts?: {
 }): SimResult {
   resetEngineGlobals();
   resetCrisisGlobals();
+  resetWalkerStateMap();
 
   const state = createInitialGameState();
   state.screen = 'game';
@@ -333,7 +334,7 @@ function runHeadlessSimulation(opts?: {
 
       // Detect new eliminations
       for (const num of aliveSet) {
-        const ws = state.walkers.find(w => w.walkerNumber === num)!;
+        const ws = getWalkerState(state, num)!;
         if (!ws.alive) {
           eliminationLog.push({
             walkerNum: num,
@@ -458,6 +459,7 @@ function runSimulationChecks() {
   check('Player at 3.0 mph accumulates warnings', () => {
     resetEngineGlobals();
     resetCrisisGlobals();
+    resetWalkerStateMap();
     const ws = createInitialGameState();
     ws.screen = 'game';
     ws.isPaused = false;

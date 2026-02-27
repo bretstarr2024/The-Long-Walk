@@ -8,9 +8,6 @@ import { buildSystemPrompt, WalkerProfile } from './prompts';
 
 const MODEL = 'gpt-5.2-chat-latest';
 
-// Cache: base agent config per walker (without tools — tools are per-request)
-const agentCache = new Map<number, Agent>();
-
 // Conversation history per walker: Responses API input items
 type InputItem = {
   type: 'message';
@@ -70,6 +67,3 @@ export function removeLastHistory(walkerNumber: number) {
   }
 }
 
-export function clearHistory(walkerNumber: number) {
-  historyCache.delete(walkerNumber);
-}

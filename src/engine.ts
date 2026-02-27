@@ -3,12 +3,24 @@
 // ============================================================
 
 import { GameState, WalkerState, NarrativeEntry, Act, HorrorTier } from './types';
-import { addNarrative, getAliveWalkers, getWalkerData, getWalkersRemaining, updateCurrentTime } from './state';
+import { addNarrative, getAliveWalkers, getWalkerData, getWalkerState, getWalkersRemaining, updateCurrentTime } from './state';
 import { getRouteSegment, getCrowdPhase, AMBIENT_DESCRIPTIONS } from './data/route';
 import {
   checkForCrisis, updateActiveCrisis, updateBladder, updateBowel, updateTempEffects,
   getActiveSpeedOverride, getActiveStaminaDrainMult, triggerBondedGriefCrisis,
 } from './crises';
+
+// ============================================================
+// HELPERS
+// ============================================================
+
+function computeAllyNearby(state: GameState): boolean {
+  const p = state.player;
+  if (p.alliances.length === 0) return false;
+  return state.walkers.some(w =>
+    w.alive && p.alliances.includes(w.walkerNumber) && w.position === p.position
+  );
+}
 
 // ============================================================
 // MASTER TICK — called every frame
@@ -25,12 +37,15 @@ export function gameTick(state: GameState, realDeltaMs: number) {
   // Update world time
   updateWorldTime(state, gameMinutes);
 
+  // Compute ally-nearby once per tick (used by stamina + morale)
+  const allyNearby = computeAllyNearby(state);
+
   // Update player stats
   updatePlayerSpeed(state);
-  updatePlayerStamina(state, gameMinutes);
+  updatePlayerStamina(state, gameMinutes, allyNearby);
   updateHydrationHunger(state, gameMinutes);
   updatePain(state, gameMinutes);
-  updateMorale(state, gameMinutes);
+  updateMorale(state, gameMinutes, allyNearby);
   updateClarity(state, gameMinutes);
   updateCooldowns(state, gameMinutes);
 
@@ -151,7 +166,7 @@ function computeEffortSpeed(p: import('./types').PlayerState, state: GameState):
 // STAMINA
 // ============================================================
 
-function updatePlayerStamina(state: GameState, gameMinutes: number) {
+function updatePlayerStamina(state: GameState, gameMinutes: number, allyNearby: boolean) {
   const p = state.player;
   const hours = state.world.hoursElapsed;
 
@@ -188,13 +203,8 @@ function updatePlayerStamina(state: GameState, gameMinutes: number) {
   else if (p.effort >= 50) modifier *= 0.7; // moderate zone
   else if (p.effort < 40) modifier *= 0.6; // barely walking, conserving
 
-  // Alliance benefit
-  if (p.alliances.length > 0) {
-    const allyNearby = state.walkers.some(w =>
-      w.alive && p.alliances.includes(w.walkerNumber) && w.position === p.position
-    );
-    if (allyNearby) modifier *= 0.9;
-  }
+  // Alliance benefit (allyNearby computed once per tick in gameTick)
+  if (allyNearby) modifier *= 0.9;
 
   // Crisis temp effect: stamina drain multiplier
   const drainMult = getActiveStaminaDrainMult(state);
@@ -290,7 +300,7 @@ function updatePain(state: GameState, gameMinutes: number) {
 // MORALE
 // ============================================================
 
-function updateMorale(state: GameState, gameMinutes: number) {
+function updateMorale(state: GameState, gameMinutes: number, allyNearby: boolean) {
   const p = state.player;
 
   // Night drain: -1 per 30 minutes
@@ -298,14 +308,9 @@ function updateMorale(state: GameState, gameMinutes: number) {
     p.morale = Math.max(0, p.morale - (gameMinutes / 30));
   }
 
-  // Alliance proximity boost: +1 per 10 minutes
-  if (p.alliances.length > 0) {
-    const allyNear = state.walkers.some(w =>
-      w.alive && p.alliances.includes(w.walkerNumber) && w.position === p.position
-    );
-    if (allyNear) {
-      p.morale = Math.min(100, p.morale + (gameMinutes / 10));
-    }
+  // Alliance proximity boost: +1 per 10 minutes (allyNearby computed once per tick in gameTick)
+  if (allyNearby) {
+    p.morale = Math.min(100, p.morale + (gameMinutes / 10));
   }
 
   // Pain spike drain
@@ -359,11 +364,16 @@ function checkPlayerWarnings(state: GameState, gameMinutes: number) {
   if (!p.alive) return;
 
   if (p.speed < 4.0) {
-    // Reset walk-off timer while slow
-    p.warningTimer = 0;
+    // Don't reset walk-off timer or accumulate slow time during crisis speed overrides
+    // (player didn't voluntarily slow down)
+    const hasCrisisSpeedOverride = p.activeCrisis?.speedOverride != null;
+    if (!hasCrisisSpeedOverride) {
+      // Reset walk-off timer while slow
+      p.warningTimer = 0;
+    }
 
-    // Accumulate slow time
-    p.slowAccum += gameMinutes;
+    // Accumulate slow time (skip during crisis speed overrides)
+    if (!hasCrisisSpeedOverride) p.slowAccum += gameMinutes;
 
     // Check cooldown since last warning
     const minutesSinceLastWarn = (state.world.hoursElapsed - p.lastWarningTime) * 60;
@@ -390,7 +400,7 @@ function checkPlayerWarnings(state: GameState, gameMinutes: number) {
   }
 }
 
-function issueWarning(state: GameState) {
+export function issueWarning(state: GameState) {
   const p = state.player;
   console.log(`[Engine] WARNING issued! ${p.warnings + 1}/3 at speed ${p.speed.toFixed(1)} mph, mile ${state.world.milesWalked.toFixed(1)}`);
   p.warnings++;
@@ -833,6 +843,7 @@ export function playerPee(state: GameState): boolean {
   const p = state.player;
   if (p.bladder < 20) return false;
   if (p.activeCrisis) return false;
+  if (p.warnings >= 2) return false; // pee costs 1 warning — would be fatal at 2
 
   p.bladder = 0;
   // Issue 1 warning (must walk off over 60 game-min)
@@ -848,6 +859,7 @@ export function playerPoop(state: GameState): boolean {
   const p = state.player;
   if (p.bowel < 20) return false;
   if (p.activeCrisis) return false;
+  if (p.warnings >= 1) return false; // poop costs 2 warnings — would be fatal at 1+
 
   p.bowel = 0;
   // Narrative first — warnings can trigger elimination/death which should come after
@@ -890,6 +902,9 @@ export function updatePositionTransition(gameMinutes: number) {
   }
 }
 
+// Cache of Tier 1/2 walker numbers — built lazily, avoids iterating all 99 walkers in updateEnemyStatus
+let tier12Numbers: number[] | null = null;
+
 /** Reset module-level state for headless testing */
 export function resetEngineGlobals() {
   npcSlowAccum.clear();
@@ -897,6 +912,7 @@ export function resetEngineGlobals() {
   npcWarningBoost.clear();
   lastAmbientMile = -5;
   positionTransition = null;
+  tier12Numbers = null;
 }
 
 // ============================================================
@@ -909,12 +925,12 @@ export function shareFood(state: GameState): boolean {
 
   // Find first nearby ally
   const allyNum = p.alliances.find(num => {
-    const w = state.walkers.find(ws => ws.walkerNumber === num);
+    const w = getWalkerState(state, num);
     return w && w.alive && w.position === p.position;
   });
   if (allyNum == null) return false;
 
-  const ally = state.walkers.find(w => w.walkerNumber === allyNum);
+  const ally = getWalkerState(state, allyNum);
   if (!ally) return false;
 
   // Burns player's food cooldown — ally gets the food, not you
@@ -936,12 +952,12 @@ export function shareWater(state: GameState): boolean {
   if (p.waterCooldown > 0) return false;
 
   const allyNum = p.alliances.find(num => {
-    const w = state.walkers.find(ws => ws.walkerNumber === num);
+    const w = getWalkerState(state, num);
     return w && w.alive && w.position === p.position;
   });
   if (allyNum == null) return false;
 
-  const ally = state.walkers.find(w => w.walkerNumber === allyNum);
+  const ally = getWalkerState(state, allyNum);
   if (!ally) return false;
 
   p.waterCooldown = 15;
@@ -975,7 +991,7 @@ function updateWalkTogether(state: GameState, gameMinutes: number) {
 }
 
 export function formAlliance(state: GameState, walkerNum: number): boolean {
-  const w = state.walkers.find(w => w.walkerNumber === walkerNum);
+  const w = getWalkerState(state, walkerNum);
   if (!w || !w.alive || w.isAlliedWithPlayer) return false;
   if (state.player.alliances.length >= 2) return false;
   if (w.relationship < 60) return false;
@@ -988,11 +1004,11 @@ export function formAlliance(state: GameState, walkerNum: number): boolean {
 }
 
 export function breakAlliance(state: GameState, walkerNum: number): boolean {
-  const w = state.walkers.find(ws => ws.walkerNumber === walkerNum);
+  const w = getWalkerState(state, walkerNum);
   if (!w || !w.isAlliedWithPlayer || w.isBonded) return false;
 
   w.isAlliedWithPlayer = false;
-  w.relationship = -40;
+  w.relationship = -41; // Below -40 threshold so getRelationshipTier() returns 'enemy'
   w.isEnemy = true;
   w.walkingTogether = false;
   state.player.alliances = state.player.alliances.filter(n => n !== walkerNum);
@@ -1008,7 +1024,7 @@ export function breakAlliance(state: GameState, walkerNum: number): boolean {
 }
 
 export function formBond(state: GameState, walkerNum: number): boolean {
-  const w = state.walkers.find(ws => ws.walkerNumber === walkerNum);
+  const w = getWalkerState(state, walkerNum);
   if (!w || !w.isAlliedWithPlayer || w.isBonded) return false;
   if (w.relationship < 85 || w.conversationCount < 8) return false;
   if (state.player.bondedAlly !== null) return false;
@@ -1025,10 +1041,16 @@ export function formBond(state: GameState, walkerNum: number): boolean {
 }
 
 export function updateEnemyStatus(state: GameState) {
-  for (const w of state.walkers) {
-    if (!w.alive) continue;
-    const data = getWalkerData(state, w.walkerNumber);
-    if (!data || data.tier > 2) continue; // Only Tier 1/2
+  // Build Tier 1/2 walker number cache once (only 24 walkers instead of 99)
+  if (tier12Numbers === null) {
+    tier12Numbers = state.walkerData.filter(d => d.tier <= 2).map(d => d.walkerNumber);
+  }
+
+  for (const num of tier12Numbers) {
+    const w = getWalkerState(state, num);
+    if (!w || !w.alive) continue;
+    const data = getWalkerData(state, num);
+    if (!data) continue;
 
     // Become enemy when relationship drops below -40
     if (w.relationship < -40 && !w.isEnemy) {

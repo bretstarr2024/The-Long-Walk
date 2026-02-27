@@ -4,7 +4,7 @@
 // ============================================================
 
 import { GameState, ApproachType, WalkerState } from './types';
-import { getWalkerData, getAliveWalkers, addNarrative } from './state';
+import { getWalkerData, getWalkerState, getAliveWalkers, addNarrative } from './state';
 import { requestApproach, type WalkerProfile, type GameContextForAgent } from './agentClient';
 
 // --- Config ---
@@ -233,7 +233,7 @@ export function checkApproach(state: GameState): void {
   };
 
   // Build walker profile and game context for LLM
-  const w = state.walkers.find(ws => ws.walkerNumber === chosen.walkerNum)!;
+  const w = getWalkerState(state, chosen.walkerNum)!;
   const profile: WalkerProfile = {
     name: data.name,
     walkerNumber: data.walkerNumber,

@@ -3,7 +3,7 @@
 // ============================================================
 
 import { GameState, PlayerState, WalkerState, PackPosition, Reason } from './types';
-import { getNearbyWalkers, getWalkerData, getWalkersRemaining, getRelationshipTier, addNarrative } from './state';
+import { getNearbyWalkers, getWalkerData, getWalkerState, getWalkersRemaining, getRelationshipTier, addNarrative } from './state';
 import { setPlayerSpeed, setPlayerEffort, setPlayerPosition, requestFood, requestWater, shareFood, shareWater, playerPee, playerPoop, formAlliance, breakAlliance, formBond } from './engine';
 import { startDialogue, selectDialogueOption, closeDialogue } from './dialogue';
 import { getEndingText, getGameStats, EndingType } from './narrative';
@@ -207,7 +207,7 @@ function handleShareWater(state: GameState) {
 
 function getChatWalker(state: GameState): WalkerState | undefined {
   if (!state.llmDialogue) return undefined;
-  return state.walkers.find(ws => ws.walkerNumber === state.llmDialogue!.walkerId);
+  return getWalkerState(state, state.llmDialogue!.walkerId);
 }
 
 function handleChatShareFood(state: GameState) {
@@ -344,6 +344,7 @@ function handleHostileAction(state: GameState, actionType: import('./types').Pla
       }
       w.warnings++;
       w.speed = Math.min(w.speed, 3.5);
+      w.warningTimer = 0; // Prevent NPC warning system from cascading to 3rd warning
       addNarrative(state, `"Warning! ${w.warnings === 1 ? 'Warning' : 'Second warning,'} ${w.walkerNumber}!"`, 'warning');
       // Player risks warning (60% chance)
       if (Math.random() < 0.6 && p.warnings < 2) {
@@ -366,6 +367,7 @@ function handleHostileAction(state: GameState, actionType: import('./types').Pla
       }
       p.hydration = Math.min(100, p.hydration + 20);
       w.warnings++;
+      w.warningTimer = 0; // Prevent NPC warning system from cascading to 3rd warning
       addNarrative(state, `"Warning! ${w.warnings === 1 ? 'Warning' : 'Second warning,'} ${w.walkerNumber}!"`, 'warning');
       if (Math.random() < 0.4 && p.warnings < 2) {
         p.warnings++;
@@ -449,7 +451,7 @@ function handleTalk(state: GameState) {
 }
 
 function handleWalkerPicked(state: GameState, walkerNumber: number) {
-  const w = state.walkers.find(ws => ws.walkerNumber === walkerNumber);
+  const w = getWalkerState(state, walkerNumber);
   if (!w || !w.alive) return;
 
   const data = getWalkerData(state, walkerNumber);
@@ -500,7 +502,7 @@ export function closeLLMDialogue(state: GameState) {
   const dlg = state.llmDialogue;
   // Increment conversation count if at least one exchange happened
   if (dlg.messages.length >= 2) {
-    const w = state.walkers.find(ws => ws.walkerNumber === dlg.walkerId);
+    const w = getWalkerState(state, dlg.walkerId);
     if (w) w.conversationCount++;
   }
   const name = dlg.walkerName;
@@ -514,7 +516,7 @@ export function closeLLMDialogue(state: GameState) {
 }
 
 function buildGameContext(state: GameState, walkerNum: number): GameContextForAgent {
-  const w = state.walkers.find(ws => ws.walkerNumber === walkerNum)!;
+  const w = getWalkerState(state, walkerNum)!;
   const remaining = getWalkersRemaining(state);
   const recentEvents = state.narrativeLog
     .slice(-10)
@@ -673,7 +675,7 @@ async function handleSendChat(state: GameState) {
 }
 
 function applyGameEffect(state: GameState, effect: { effectType: string; walkerId?: number; delta?: number; key?: string; value?: boolean; text?: string }) {
-  const w = state.llmDialogue ? state.walkers.find(ws => ws.walkerNumber === state.llmDialogue!.walkerId) : null;
+  const w = state.llmDialogue ? getWalkerState(state, state.llmDialogue!.walkerId) ?? null : null;
 
   switch (effect.effectType) {
     case 'relationship':
@@ -1007,7 +1009,7 @@ function createGameStructure() {
         <div class="viz-panel">
           <canvas id="viz-canvas" width="350" height="600"></canvas>
         </div>
-        <div class="narrative-panel" id="narrative-panel"></div>
+        <div class="narrative-panel" id="narrative-panel" role="log" aria-live="polite"></div>
       </div>
       <div class="game-bottom">
         <div class="status-panel" id="status-panel"></div>
@@ -1303,7 +1305,7 @@ function updateWalkersPanel(state: GameState) {
 
 // --- Walker dossier ---
 function renderDossier(state: GameState, walkerNum: number): string {
-  const w = state.walkers.find(ws => ws.walkerNumber === walkerNum);
+  const w = getWalkerState(state, walkerNum);
   const data = getWalkerData(state, walkerNum);
   if (!w || !data) return '<div class="panel-title">Unknown Walker</div>';
 
@@ -1395,7 +1397,7 @@ function updateActionsPanel(state: GameState) {
   let shareHtml = '';
   if (!inCrisis) {
     const nearbyAlly = state.player.alliances.find(num => {
-      const w = state.walkers.find(ws => ws.walkerNumber === num);
+      const w = getWalkerState(state, num);
       return w && w.alive && w.position === state.player.position;
     });
     if (nearbyAlly != null) {
@@ -1507,7 +1509,7 @@ function handleApproachReply(state: GameState) {
   const approach = state.activeApproach;
   // Open LLM chat with this walker, pre-seeded with their opening line
   const walkerNum = approach.walkerId;
-  const w = state.walkers.find(ws => ws.walkerNumber === walkerNum);
+  const w = getWalkerState(state, walkerNum);
   const data = getWalkerData(state, walkerNum);
   if (!w || !w.alive || !data) {
     state.activeApproach = null;
@@ -1529,7 +1531,7 @@ function handleApproachReply(state: GameState) {
 
 function handleApproachNod(state: GameState) {
   if (!state.activeApproach) return;
-  const w = state.walkers.find(ws => ws.walkerNumber === state.activeApproach!.walkerId);
+  const w = getWalkerState(state, state.activeApproach!.walkerId);
   if (w) {
     w.relationship = Math.min(100, w.relationship + 3);
     w.conversationCount++;
@@ -1541,7 +1543,7 @@ function handleApproachNod(state: GameState) {
 
 function handleApproachIgnore(state: GameState) {
   if (!state.activeApproach) return;
-  const w = state.walkers.find(ws => ws.walkerNumber === state.activeApproach!.walkerId);
+  const w = getWalkerState(state, state.activeApproach!.walkerId);
   if (w) {
     w.relationship = Math.max(-100, w.relationship - 2);
   }
@@ -1569,7 +1571,7 @@ function updateSceneOverlay(state: GameState) {
 
   const html = `
     <div class="scene-overlay">
-      <div class="scene-box">
+      <div class="scene-box" role="dialog" aria-modal="true">
         <div class="scene-text">${escapeHtml(panel.text)}</div>
         <div class="scene-footer">
           <span class="scene-counter">${scene.currentPanel + 1}/${scene.panels.length}</span>
@@ -1664,7 +1666,7 @@ function updateCrisisOverlay(state: GameState) {
 
   // Check if ally is nearby for ally-required options
   const hasAllyNearby = state.player.alliances.some(num => {
-    const w = state.walkers.find(ws => ws.walkerNumber === num);
+    const w = getWalkerState(state, num);
     return w && w.alive && w.position === state.player.position;
   });
 
@@ -1676,17 +1678,17 @@ function updateCrisisOverlay(state: GameState) {
         data-crisis-option="${opt.id}" ${disabled ? 'disabled' : ''}>
         <span class="crisis-option-key">${i + 1}</span>
         <span class="crisis-option-text">
-          <strong>${opt.label}</strong> ${allyTag}
-          <span class="crisis-option-desc">${opt.description}</span>
+          <strong>${escapeHtml(opt.label)}</strong> ${allyTag}
+          <span class="crisis-option-desc">${escapeHtml(opt.description)}</span>
         </span>
       </button>`;
   }).join('');
 
   container.innerHTML = `
     <div class="crisis-overlay">
-      <div class="crisis-box">
+      <div class="crisis-box" role="dialog" aria-modal="true">
         <div class="crisis-header">
-          <div class="crisis-title">${crisis.title}</div>
+          <div class="crisis-title">${escapeHtml(crisis.title)}</div>
           <div class="crisis-timer">
             <span class="crisis-timer-text">${timerSecs}s</span>
             <div class="crisis-timer-bar">
@@ -1694,7 +1696,7 @@ function updateCrisisOverlay(state: GameState) {
             </div>
           </div>
         </div>
-        <div class="crisis-description">${crisis.description}</div>
+        <div class="crisis-description">${escapeHtml(crisis.description)}</div>
         <div class="crisis-options">
           ${optionsHtml}
         </div>
@@ -1719,18 +1721,18 @@ function updateDialogueOverlay(state: GameState) {
   }
 
   const d = state.activeDialogue;
-  const w = state.walkers.find(ws => ws.walkerNumber === d.walkerNumber);
+  const w = getWalkerState(state, d.walkerNumber);
   const relLabel = !w ? '' : w.relationship > 40 ? '+++' : w.relationship > 20 ? '++' : w.relationship > 0 ? '+' : w.relationship > -20 ? '-' : '--';
 
   const optionsHtml = d.options.map((opt, i) =>
-    `<button class="dialogue-option" data-option="${i}">${opt.text}</button>`
+    `<button class="dialogue-option" data-option="${i}">${escapeHtml(opt.text)}</button>`
   ).join('');
 
   const html = `
     <div class="dialogue-overlay">
       <div class="dialogue-box">
-        <div class="dialogue-speaker">${d.walkerName} (#${d.walkerNumber}) — ${relLabel}</div>
-        <div class="dialogue-text">${d.text}</div>
+        <div class="dialogue-speaker">${escapeHtml(d.walkerName)} (#${d.walkerNumber}) — ${relLabel}</div>
+        <div class="dialogue-text">${escapeHtml(d.text)}</div>
         <div class="dialogue-options">
           ${optionsHtml}
           <button class="dialogue-option" data-option="-1" style="color:var(--text-dim);">[Walk away]</button>
@@ -1762,13 +1764,13 @@ function createLLMOverlay(container: HTMLElement, dlg: GameState['llmDialogue'])
 
   container.innerHTML = `
     <div class="dialogue-overlay" id="llm-overlay-bg">
-      <div class="llm-chat-box">
+      <div class="llm-chat-box" role="dialog" aria-modal="true">
         <div class="llm-chat-header">
           <div>
-            <span class="dialogue-speaker" id="llm-speaker">${dlg.walkerName} (#${dlg.walkerId})</span>
+            <span class="dialogue-speaker" id="llm-speaker">${escapeHtml(dlg.walkerName)} (#${dlg.walkerId})</span>
             <div style="display:flex;align-items:center;gap:0.3rem;">
               <button class="stop-world-btn" data-action="toggle-pause-chat" id="llm-pause-btn">\u25A0 STOP</button>
-              <button class="speed-btn" data-action="close-chat" style="font-size:0.8rem;width:auto;padding:0.2rem 0.5rem;">X</button>
+              <button class="speed-btn" data-action="close-chat" aria-label="Close" style="font-size:0.8rem;width:auto;padding:0.2rem 0.5rem;">X</button>
             </div>
           </div>
           <div class="chat-rel-row">
@@ -1792,8 +1794,8 @@ function createLLMOverlay(container: HTMLElement, dlg: GameState['llmDialogue'])
         </div>
         <div class="chat-social-actions" id="chat-social-actions"></div>
         <div class="llm-chat-input-row">
-          <input type="text" id="llm-chat-input" class="llm-chat-input" placeholder="Type a message..." autocomplete="off" />
-          <button class="action-btn" data-action="send-chat" id="llm-send-btn" style="padding:0.5rem 1rem;">Send</button>
+          <input type="text" id="llm-chat-input" class="llm-chat-input" placeholder="Type a message..." autocomplete="off" maxlength="500" />
+          <button class="action-btn" data-action="send-chat" id="llm-send-btn" aria-label="Send message" style="padding:0.5rem 1rem;">Send</button>
         </div>
       </div>
     </div>
@@ -1824,7 +1826,7 @@ let cachedSocialActionsHtml = '';
 function updateChatSocialActions(state: GameState, walkerId: number) {
   const el = document.getElementById('chat-social-actions');
   if (!el) return;
-  const w = state.walkers.find(ws => ws.walkerNumber === walkerId);
+  const w = getWalkerState(state, walkerId);
   if (!w || !w.alive) { el.innerHTML = ''; cachedSocialActionsHtml = ''; return; }
 
   const p = state.player;
@@ -1963,8 +1965,9 @@ function updateLLMChatOverlay(state: GameState) {
     llmStreamingShown = false;
   }
 
-  // Scroll to bottom
-  msgsEl.scrollTop = msgsEl.scrollHeight;
+  // Scroll to bottom only if user hasn't scrolled up (within 50px of bottom)
+  const isNearBottom = msgsEl.scrollHeight - msgsEl.scrollTop - msgsEl.clientHeight < 50;
+  if (isNearBottom) msgsEl.scrollTop = msgsEl.scrollHeight;
 
   // Update input/button disabled state directly (no rebuild)
   const inp = document.getElementById('llm-chat-input') as HTMLInputElement;
@@ -1977,7 +1980,7 @@ function updateLLMChatOverlay(state: GameState) {
   if (inp && wasDisabled && !dlg.isStreaming) inp.focus();
 
   // --- Targeted DOM updates for chat card elements ---
-  const w = state.walkers.find(ws => ws.walkerNumber === dlg.walkerId);
+  const w = getWalkerState(state, dlg.walkerId);
 
   // Relationship gauge
   if (w) {
