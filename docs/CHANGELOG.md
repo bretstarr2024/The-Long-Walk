@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.8.0 — 2026-02-27
+
+Playtest-driven overhaul — book-accurate warnings, speech bubble system, icon system, and 4 UX fixes.
+
+### Warning System
+- **Book-accurate format**: "Warning. Warning [number]." / "Second warning, [number]." / "Third warning, [number]. Final warning." — periods not exclamations, numbers only, never names
+- Updated player warnings, NPC warnings, and 4 scripted scene warnings (Barkovitch incident, Olson breakdown, Barkovitch dance, McVries choice)
+
+### Speech Bubble System (New)
+- **Floating cartoon speech bubbles** for overheard conversations — replaces narrative log wall-of-text
+- **Warning reaction bubbles**: When a nearby walker gets warned, a random Tier 1/2 NPC reacts with a character-appropriate comment (sympathetic / neutral / unsympathetic based on relationship)
+- **Staggered multi-line conversations**: Lines appear 2.5s apart with left/right alternating positioning
+- Both scripted overheards (narrative.ts) and LLM ambient overheards (overhear.ts) now route through speech bubbles
+- CSS: backdrop blur, bubble tails, fade in/out animations, responsive (340px desktop, 260px mobile)
+
+### Icon System (New)
+- **11 inline SVG icons** (14px): food, water, story, encourage, walk, alliance, bond, break, talk, think, observe
+- **Bright accent colors**: amber (food), blue (water/talk), purple (story/think), green (encourage/walk/alliance), gold (bond), red (break)
+- Applied to chat social actions, main actions panel, and dossier Talk button
+
+### UX Fixes
+- **Chat close button**: Moved from inline flex row to standard top-right corner position (`&times;` with red hover)
+- **Approach overlay buttons**: Fixed unclickable buttons during LLM streaming — stable DOM pattern (create once, update text only) prevents button destruction mid-click
+- **Scene overlay blink**: Fixed panel transition flicker — cache now uses regenerated template string instead of browser-serialized innerHTML
+- **Think About Prize cooldown**: 5-mile cooldown added (was spammable). Button shows remaining miles when on cooldown
+
+### Infrastructure
+- **Road visualization roadmap**: Documented complete overhaul plan in `docs/ROADMAP_visualization.md`
+
 ## 0.7.1 — 2026-02-27
 
 Full 8-category code audit remediation — 9 criticals, 27 warnings, ~40 info items fixed across 16 files.
