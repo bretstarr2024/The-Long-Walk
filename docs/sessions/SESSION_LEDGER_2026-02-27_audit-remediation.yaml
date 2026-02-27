@@ -1,0 +1,88 @@
+session_id: "2026-02-27-audit-remediation"
+date: "2026-02-27"
+branch: "main"
+version: "0.7.1"
+prior_session: "2026-02-27-chat-relationship-overhaul"
+
+build_verification:
+  client_typescript: "pass"
+  server_typescript: "pass"
+  vite_build: "pass"
+  validation_suite: "22/22 pass"
+
+commits:
+  - hash: "88c79d9"
+    message: "fix(client,server): Full audit remediation — 9 criticals, 27 warnings, ~40 info items (v0.7.1)"
+  - hash: "b0b2a04"
+    message: "docs(changelog): Add v0.7.1 entry — full audit remediation"
+
+artifacts_updated:
+  - path: "server/index.ts"
+    change: "Rate limiting (10/5 req/min), security headers, body limit (50KB), message validation (2000 chars), error sanitization, CORS null for unknown origins, shared createSSEResponse helper"
+  - path: "server/agents.ts"
+    change: "Removed unused agentCache Map and clearHistory export"
+  - path: "src/engine.ts"
+    change: "Pee/poop warning guards, exported issueWarning(), computeAllyNearby once per tick, breakAlliance -41, walk-off timer crisis fix, Tier 1/2 enemy filter, getWalkerState usage"
+  - path: "src/crises.ts"
+    change: "Crisis warningRisk routed through issueWarning(), unified breakAlliance effects, empty narrative guards, getWalkerState usage"
+  - path: "src/ui.ts"
+    change: "escapeHtml on crisis/dialogue/chat-header, auto-scroll near-bottom check, hostile action warningTimer reset, ARIA attributes (dialog, log, aria-label), maxlength on chat input, getWalkerState usage (15 replacements)"
+  - path: "src/agentClient.ts"
+    change: "SSE parser chunk boundary fix — currentEvent/currentData persist across read() chunks in all 3 parsers"
+  - path: "src/main.ts"
+    change: "Crisis keyboard DOM clearing, startAudio listener removal after init"
+  - path: "src/state.ts"
+    change: "walkerStateMap O(1) lookup, getWalkersRemaining O(1), getNearbyWalkers caching, resetWalkerStateMap export"
+  - path: "src/visualization.ts"
+    change: "Removed duplicate walkerDataMap (uses state.ts), ResizeObserver for canvas, scanline pre-render offscreen canvas, noise texture reuse"
+  - path: "src/styles.css"
+    change: "--border-dim CSS variable, chat header flex-wrap, prefers-reduced-motion, responsive breakpoints (900px/700px)"
+  - path: "src/audio.ts"
+    change: "Warning buzzer onended disconnect callback"
+  - path: "src/data/route.ts"
+    change: "Binary search for getRouteSegment (O(log n) vs linear)"
+  - path: "src/approach.ts"
+    change: "getWalkerState O(1) lookup"
+  - path: "src/dialogue.ts"
+    change: "getWalkerState + getWalkersRemaining O(1) lookups"
+  - path: "src/overhear.ts"
+    change: "getWalkersRemaining O(1) lookup"
+  - path: "tests/validate.ts"
+    change: "resetWalkerStateMap in test resets, getWalkerState usage"
+
+decisions_made:
+  - decision: "breakAlliance sets relationship to -41, not -40"
+    rationale: "getRelationshipTier() boundary: enemy is < -40, hostile is >= -40. Setting -40 made the tier 'hostile' while isEnemy was true — inconsistent."
+  - decision: "Crisis warningRisk uses issueWarning() from engine.ts"
+    rationale: "Inline warning logic in crises.ts didn't sync lastWarningTime/slowAccum/lastWarningMile, risking double-warnings."
+  - decision: "Circular dependency engine.ts ↔ crises.ts is acceptable"
+    rationale: "Both imports are used at function call time, not at module initialization. Vite/Rollup handles this correctly."
+  - decision: "Rate limits set to 10/min (chat) and 5/min (overhear/approach)"
+    rationale: "Generous enough for active gameplay but prevents API abuse. Per-IP sliding window."
+  - decision: "Narrative log trim threshold raised to 500/400"
+    rationale: "Previous 200/150 caused frequent full-panel rebuilds. 500 entries gives ample scrollback."
+  - decision: "Canvas ResizeObserver instead of per-frame getBoundingClientRect"
+    rationale: "getBoundingClientRect forces layout recalculation. ResizeObserver fires only on actual resize events."
+
+open_questions:
+  - "Should rate limiting persist across server restarts (Redis/file-based) or is in-memory sufficient?"
+  - "Is 2000-char message limit appropriate for all use cases, or should it be configurable?"
+  - "Should the responsive breakpoints be tested on actual mobile devices?"
+
+known_risks:
+  - "In-memory rate limiting resets on server restart — could allow burst abuse"
+  - "Background agents ran in parallel on overlapping files — integration required manual fixup (computeAllyNearby duplicate). Pattern works but needs post-merge verification."
+  - "prefers-reduced-motion disables ALL animations — some informational animations (fade-in text) might benefit from remaining"
+
+explicitly_deferred:
+  - "Content Security Policy headers — would require nonce/hash for inline styles and scripts"
+  - "WebSocket upgrade from SSE — SSE is sufficient for current unidirectional streaming"
+  - "Service worker for offline mode — game requires LLM server, offline mode is limited value"
+  - "Unit tests for individual functions — headless simulation covers integration; unit tests deferred"
+  - "Radial gradient caching in visualization — position-dependent, bucket caching impractical"
+
+next_actions:
+  - "Deploy v0.7.1 to Railway and verify rate limiting + security headers work in production"
+  - "Playtest the full game loop with LLM server to verify all fixes don't regress gameplay"
+  - "Consider adding structured logging (request IDs, timing) to server endpoints"
+  - "Review mobile/tablet experience with new responsive breakpoints"
