@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.6.1 — 2026-02-27
+
+Railway deployment + 4 playtest bug fixes (gunshot timing, crisis buttons, canvas readability, terrain grade).
+
+### Deployment
+- **Railway production deployment**: Single-service architecture — Hono serves API routes + Vite static build on same domain
+- **Static file serving**: `@hono/node-server/serve-static` with SPA fallback for client-side routing
+- **Dynamic port**: `process.env.PORT` for Railway, falls back to 3001 for local dev
+- **CORS auto-config**: Railway domain auto-added via `RAILWAY_PUBLIC_DOMAIN` env var
+- **Production client URLs**: `agentClient.ts` uses relative URLs (same-origin) in production, localhost:3001 in dev
+
+### Bug Fixes
+- **Gunshot before 3rd warning**: Warning + elimination narrative entries were added in same game tick, causing both sounds to fire synchronously. Gunshots now delayed 3s via `setTimeout` so warning voice plays first. Multiple gunshots staggered by 500ms.
+- **Crisis overlay buttons unresponsive**: `handleCrisisOption` cleared `cachedCrisisHtml` but never cleared `container.innerHTML` — overlay stayed visible, second click returned early. Fixed by clearing DOM immediately (same pattern as `handleSceneClose`).
+- **Canvas text unreadable on HiDPI**: No `devicePixelRatio` scaling — 5-7px fonts were microscopic on Retina displays. Added DPI-aware canvas buffer sizing with `ctx.setTransform(dpr,...)`. All font sizes increased to 9-12px range.
+- **Terrain strip unintuitive**: Left-edge elevation strip only showed colors with no grade labels. Now shows `+6% ▲` (uphill), `-3% ▼` (downhill), `ROUGH`, or `FLAT` with color-coded text. Strip widened from 12px to 18px, label changed from "ELEV" to "GRADE".
+
 ## 0.6.0 — 2026-02-26
 
 Playtest-driven overhaul — 3 critical bug fixes, effort bar core mechanic, bathroom system, warning voice, The Major, and visualization reimagining.
