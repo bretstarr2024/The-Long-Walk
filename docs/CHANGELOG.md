@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.8.5 — 2026-02-27
+
+Playtest fixes — ticket stacking, observe cooldown, warning reaction timing, game over stat accuracy.
+
+### Bug Fixes
+- **Warning reaction bubbles only on elimination**: Bystander reactions ("There goes another one...") now only fire on 3rd/final warning. Previously fired on all warnings, which was misleading when the walker wasn't actually being eliminated
+- **Game over warnings stat**: "Warnings Received" now shows `player.warnings` (active count at death — always 3) instead of `totalWarningsReceived` (lifetime including walked-off warnings, which showed confusing numbers like 5)
+
+### Improvements
+- **Ticket queue stacking**: Converted single `activeTicket` to `ticketQueue[]` array. Multiple eliminations in quick succession now stack tickets vertically instead of overwriting. Each ticket gets 5s visible + 1.2s fade-out (6.2s total). Individual DOM elements created/removed by ID
+- **Look Around cooldown**: 3-mile cooldown prevents morale spam. Button shows remaining miles when on cooldown, matching Stretch/Prize pattern
+
 ## 0.8.4 — 2026-02-27
 
 Playtest-driven fixes — 10 bugs/features from production testing. Warning visibility, terrain feedback, ticket popup, pain management, clarity mechanics, game over stats.

@@ -2091,6 +2091,10 @@ html, body {
   transform: translateX(-50%);
   z-index: 160;
   pointer-events: none;
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: center;
+  gap: 10px;
 }
 
 .ticket-popup {

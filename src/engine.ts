@@ -651,12 +651,12 @@ function issueNPCWarning(state: GameState, w: WalkerState) {
   if (w.position === state.player.position) {
     addNarrative(state, announcement, 'warning');
 
-    // Trigger a bystander reaction bubble from a nearby Tier 1/2 NPC
-    const reactors = state.walkers.filter(r =>
+    // Trigger a bystander reaction bubble only on final warning (about to be eliminated)
+    const reactors = w.warnings >= 3 ? state.walkers.filter(r =>
       r.alive && r.walkerNumber !== w.walkerNumber &&
       r.position === state.player.position &&
       (getWalkerData(state, r.walkerNumber)?.tier ?? 3) <= 2
-    );
+    ) : [];
     if (reactors.length > 0) {
       const reactor = reactors[Math.floor(Math.random() * reactors.length)];
       const reactorData = getWalkerData(state, reactor.walkerNumber);
@@ -814,7 +814,7 @@ function eliminateWalker(state: GameState, w: WalkerState, data: import('./types
   }
 
   // Ticket popup — "getting your ticket punched"
-  state.activeTicket = {
+  state.ticketQueue.push({
     walkerNumber: w.walkerNumber,
     name: data.name,
     homeState: data.homeState,
@@ -823,7 +823,7 @@ function eliminateWalker(state: GameState, w: WalkerState, data: import('./types
     placement: 100 - state.eliminationCount, // 99th, 98th, ...
     tier: data.tier,
     startTime: Date.now(),
-  };
+  });
 
   // Morale impact on player
   const relHit = w.isAlliedWithPlayer ? -30 : (w.relationship > 40 ? -15 : w.relationship > 10 ? -8 : -3);

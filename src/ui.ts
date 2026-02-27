@@ -763,7 +763,11 @@ function applyGameEffect(state: GameState, effect: { effectType: string; walkerI
 }
 
 function handleObserve(state: GameState) {
-  const seg = getRouteSegment(state.world.milesWalked);
+  const mile = state.world.milesWalked;
+  // 3-mile cooldown
+  if ((mile - state.player.lastObserveMile) < 3) return;
+  state.player.lastObserveMile = mile;
+  const seg = getRouteSegment(mile);
   addNarrative(state, seg.notes, 'narration');
   // Grounding yourself: small morale boost from observing the world
   const boost = state.world.isNight ? 1 : 2;
@@ -1481,6 +1485,11 @@ function updateActionsPanel(state: GameState) {
   const stretchCd = !inCrisis && p.pain >= 5 && p.lastStretchMile !== undefined && (state.world.milesWalked - p.lastStretchMile) < 3
     ? ` (${Math.ceil(3 - (state.world.milesWalked - p.lastStretchMile))}mi)` : '';
 
+  const observeOnCd = (state.world.milesWalked - p.lastObserveMile) < 3;
+  const observeDisabled = inCrisis || observeOnCd;
+  const observeCd = !inCrisis && observeOnCd
+    ? ` (${Math.ceil(3 - (state.world.milesWalked - p.lastObserveMile))}mi)` : '';
+
   const thinkDisabled = inCrisis || (state.world.milesWalked - p.lastThinkMile) < 5;
   const thinkCd = !inCrisis && (state.world.milesWalked - p.lastThinkMile) < 5
     ? ` (${Math.ceil(5 - (state.world.milesWalked - p.lastThinkMile))}mi)` : '';
@@ -1503,7 +1512,7 @@ function updateActionsPanel(state: GameState) {
       <span class="si si-poop">${ICON.poop}</span>Poop ${p.bowel >= 20 ? `(2 warnings)` : ''}
     </button>
     <button class="action-btn" data-action="stretch" ${stretchDisabled ? 'disabled' : ''}><span class="si si-stretch">${ICON.stretch}</span>Stretch${stretchCd}</button>
-    <button class="action-btn" data-action="observe" ${inCrisis ? 'disabled' : ''}><span class="si si-observe">${ICON.observe}</span>Look Around</button>
+    <button class="action-btn" data-action="observe" ${observeDisabled ? 'disabled' : ''}><span class="si si-observe">${ICON.observe}</span>Look Around${observeCd}</button>
     <button class="action-btn" data-action="think" ${thinkDisabled ? 'disabled' : ''}><span class="si si-think">${ICON.think}</span>Prize${thinkCd}</button>
   `;
 
@@ -1801,33 +1810,35 @@ export function queueOverheardBubbles(state: GameState, lines: Array<{speaker: s
   }
 }
 
-// --- Ticket popup: elimination notification ---
+// --- Ticket popup: elimination notification (stacking queue) ---
+const TICKET_DISPLAY_MS = 5000;   // 5s visible before fade
+const TICKET_FADE_MS = 1200;      // 1.2s fade-out
+const TICKET_TOTAL_MS = TICKET_DISPLAY_MS + TICKET_FADE_MS;
+
 function updateTicket(state: GameState) {
   const container = document.getElementById('ticket-container');
   if (!container) return;
 
-  const ticket = state.activeTicket;
-  if (!ticket) {
+  const now = Date.now();
+
+  // Remove expired tickets
+  state.ticketQueue = state.ticketQueue.filter(t => now - t.startTime < TICKET_TOTAL_MS);
+
+  if (state.ticketQueue.length === 0) {
     if (container.innerHTML !== '') container.innerHTML = '';
     return;
   }
 
-  const now = Date.now();
-  const displayTime = ticket.tier <= 2 ? 8000 : 5000;
-  const age = now - ticket.startTime;
-
-  // Auto-dismiss
-  if (age > displayTime) {
-    state.activeTicket = null;
-    container.innerHTML = '';
-    return;
-  }
-
-  // Only create DOM once per ticket
-  if (!container.querySelector('.ticket-popup')) {
-    const ordinal = getOrdinal(ticket.placement);
-    container.innerHTML = `
-      <div class="ticket-popup" role="alert">
+  // Ensure each ticket has a DOM element
+  for (const ticket of state.ticketQueue) {
+    const id = `ticket-${ticket.walkerNumber}-${ticket.startTime}`;
+    if (!document.getElementById(id)) {
+      const ordinal = getOrdinal(ticket.placement);
+      const div = document.createElement('div');
+      div.id = id;
+      div.className = 'ticket-popup';
+      div.setAttribute('role', 'alert');
+      div.innerHTML = `
         <div class="ticket-perf-top"></div>
         <div class="ticket-body">
           <div class="ticket-stamp">TICKET PUNCHED</div>
@@ -1842,14 +1853,24 @@ function updateTicket(state: GameState) {
           </div>
         </div>
         <div class="ticket-perf-bottom"></div>
-      </div>
-    `;
+      `;
+      container.appendChild(div);
+    }
   }
 
-  // Fade out during last 1.2s
-  const el = container.querySelector('.ticket-popup') as HTMLElement;
-  if (el && age > displayTime - 1200 && !el.classList.contains('ticket-fading')) {
-    el.classList.add('ticket-fading');
+  // Fade out tickets in their last 1.2s + remove stale DOM
+  for (const el of Array.from(container.children) as HTMLElement[]) {
+    const ticket = state.ticketQueue.find(
+      t => el.id === `ticket-${t.walkerNumber}-${t.startTime}`
+    );
+    if (!ticket) {
+      el.remove();
+      continue;
+    }
+    const age = now - ticket.startTime;
+    if (age > TICKET_DISPLAY_MS && !el.classList.contains('ticket-fading')) {
+      el.classList.add('ticket-fading');
+    }
   }
 }
 

@@ -766,7 +766,7 @@ export function getGameStats(state: GameState): Record<string, string> {
     'Alliances Formed': String(state.player.alliances.length),
     'Conversations Had': String(state.conversationHistory.length),
     'Walkers Talked To': String(uniqueWalkers.size),
-    'Warnings Received': String(state.player.totalWarningsReceived),
+    'Warnings Received': String(state.player.warnings),
     'Day': String(state.world.dayNumber),
   };
 }

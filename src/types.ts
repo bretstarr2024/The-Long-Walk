@@ -129,6 +129,7 @@ export interface PlayerState {
   waterCooldown: number; // game-minutes until water can be requested
   lastThinkMile: number; // mile of last "Think About Prize" action (cooldown)
   lastStretchMile: number; // mile of last "Stretch" action (cooldown)
+  lastObserveMile: number; // mile of last "Look Around" action (cooldown)
   alliances: number[];   // walker_numbers of allied NPCs
   bondedAlly: number | null;   // walker number of bonded ally (max 1)
   enemies: number[];           // walker numbers of active enemies
@@ -403,7 +404,7 @@ export interface GameState {
   lastEnemyActionMile: number;   // mile of last enemy hostile action (cooldown)
   speechBubbles: SpeechBubble[];
   nextBubbleId: number;
-  activeTicket: TicketData | null;
+  ticketQueue: TicketData[];
 }
 
 // --- Ticket Popup (elimination) ---
