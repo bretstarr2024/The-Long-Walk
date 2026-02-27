@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.8.2 — 2026-02-27
+
+Playtest fixes — elimination timing, effort bar redesign, speech bubble improvements, and 3 UX fixes.
+
+### Elimination Timing Chain
+- **2s delay after final warning**: `pendingEliminations` Map queues eliminations instead of instant death. `processPendingEliminations()` runs each frame in game loop
+- **Random pleading**: 30% chance of Web Speech API plea after "Final warning" (cut short by gunshot)
+- **Gunshot at elimination**: `cancelSpeech()` + `playGunshot()` fires at moment of actual elimination
+- **Scene delay**: Tier 1 elimination scenes wait 2s after death via `sceneBlockedUntil` on GameState
+
+### Effort Bar Redesign
+- **Replaced range slider**: `<input type="range">` → `<div class="effort-meter">` bar matching speed meter (12px height, 2px radius)
+- **Arrow buttons inside bar**: Left/right arrows at bar edges for ±5 effort adjustment
+- **Click-to-set**: Click anywhere on meter to set effort by position percentage
+
+### Speech Bubble Improvements
+- **Doubled duration**: Default 6s→12s, overheard 4s→8s (minimum), per-character scaling 55→110ms/char
+- **Dissolve fade-out**: 1.5s animation with progressive blur (0→1px→3px) replacing abrupt 0.5s fade
+
+### UX Fixes
+- **Music on title page**: Ambient drone starts on first user gesture (title screen) instead of waiting for game start
+- **Story action ungrayed**: Removed relationship≥10 gate from Story action — works with hostile walkers
+- **Approach overlay dismiss**: `clearApproachBanner()` helper directly clears DOM on Reply/Nod/Ignore click (was blocked by stale render guard)
+
+### Engine
+- **`resetPendingEliminations`**: Added to `resetEngineGlobals()` for headless test isolation
+
 ## 0.8.1 — 2026-02-27
 
 Chat header redesign, stat icons, error handling, and speech bubble fix.
