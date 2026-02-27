@@ -1,5 +1,54 @@
 # Changelog
 
+## 0.7.0 — 2026-02-27
+
+Chat interface, relationships & player interaction overhaul — relationships become the core gameplay loop.
+
+### Relationship System
+- **8-tier relationship spectrum**: Enemy, Hostile, Wary, Neutral, Friendly, Close, Allied, Bonded — with color-coded labels, threshold-based transitions, and `getRelationshipTier()` derived function
+- **Chat card relationship gauge**: 80px gradient bar with position marker, tier label in tier color, trend arrow (↑/↓), alliance/bonded badge
+- **Chat card stat bars**: Compact read-only bars for player morale/stamina and NPC morale/stamina
+- **Relationship → stat bonuses**: +2 morale per relationship point gained (both), +1 stamina burst on ≥5 delta; -1 morale per point lost (player only)
+
+### Social Actions (from chat, any walker)
+- **Share Food**: +8 stamina, +5 morale, +10 relationship (30-min cooldown)
+- **Share Water**: +5 stamina, +3 morale, +8 relationship (15-min cooldown)
+- **Tell a Story**: +5 morale NPC, +3 morale player (10-mile cooldown, requires neutral+)
+- **Encourage**: +3 morale NPC, +1 morale player (5-mile cooldown, any relationship)
+- **Walk Together**: +2 morale/mile both, -3 stamina/mile both (toggle, requires friendly+)
+
+### Alliance Expansion
+- **Propose Alliance** from chat: Available at relationship ≥ 40. Outcome by threshold (refused/50-50/accepted)
+- **Propose Bond** from chat: Available when allied, relationship ≥ 85, conversations ≥ 8. Max 1 bonded ally
+- **Break Alliance** from chat: Relationship → -40, instant enemy status
+
+### Enemy System
+- **Auto-detection**: Become enemy at relationship < -40, stop at ≥ -20 (hysteresis band)
+- **5 enemy-initiated crisis events**: Pace disruption, psychological warfare, sleep attack, crowd manipulation, supply interference — all use existing crisis system with 5-mile cooldown
+- **7 player hostile actions** from chat: Taunt, lullaby, isolation, pace pressure, crowd turn, trip, steal supplies — 3rd-warning safety enforced on all
+- **Enemy confrontation approach**: Priority 4, NPC approaches player to needle/taunt (10-mile key)
+- **Bonded grief crisis**: Triggered on bonded ally death — -40 morale + options (rage/numb/honor)
+- **Enemy visualization**: Red pulsing ring on canvas (sine wave opacity)
+- **Bonded visualization**: Gold inner ring inside blue alliance ring
+
+### Chat UX
+- **"Stop the World" button**: Pause game from chat overlay header. Auto-resumes on chat close
+- **Social action buttons** in chat card with cooldown timers
+
+### Audit Infrastructure
+- `/audit` command: Runs all 8 code review commands in parallel, presents consolidated report
+
+### Bug Fixes (from audit)
+- **`_activeEffects` race condition**: Module-level mutable state shared across concurrent SSE requests. Tools now closure-bound per-request — no shared state
+- **Act transitions skip/regress**: Acts could jump from 2→4 or regress from 3→2 under fast eliminations. Now monotonically increasing
+- **Poop narrative after death**: `issueWarning()` could trigger elimination before narrative was added. Narrative now added first
+- **Enemy/bonded prompt gated by arcPhase**: Tier 2 walkers without arcs never got hostile prompts. Moved relationship context outside arc guard
+- **Scene panel XSS**: Scene panel text rendered via innerHTML without `escapeHtml()`. Added escaping to both render paths
+- **Absence effects O(n²)**: `checkAbsenceEffects` used `.find()` instead of `getWalkerData()` O(1) map lookup
+
+### Validation
+- 2 new checks: enemy/bond field initialization, relationship tier boundary correctness (22 total)
+
 ## 0.6.1 — 2026-02-27
 
 Railway deployment + 4 playtest bug fixes (gunshot timing, crisis buttons, canvas readability, terrain grade).
