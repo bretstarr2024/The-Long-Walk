@@ -1,0 +1,63 @@
+session_id: "2026-02-27-chat-header-stat-icons"
+date: "2026-02-27"
+branch: "main"
+version: "0.8.1"
+prior_session: "2026-02-27-playtest-overhaul-v2"
+
+build_verification:
+  client_typescript: "pass"
+  server_typescript: "pass"
+  vite_build: "pass"
+  validation_suite: "blocked — Node.js 25.6.1 import.meta.env issue (pre-existing)"
+
+commits:
+  - hash: "bd23746"
+    message: "feat(client,server): Chat header redesign, stat icons, error handling, bubble fix (v0.8.1)"
+  - hash: "2a08c3d"
+    message: "docs(changelog): Add v0.8.1 entry — chat header, stat icons, error handling"
+
+artifacts_updated:
+  - path: "server/index.ts"
+    change: "Added classifyAgentError() — maps OpenAI errors to safe user-facing messages. Removed static errorMessage parameter from createSSEResponse and all 3 call sites."
+  - path: "src/ui.ts"
+    change: "Chat header redesign (column layout, prominent STOP button, visible stat bars with values, STM→STA). 10 new ICON entries (8 stat + pee + poop). HUD stat rows with icons + title tooltips. Speech bubble stable DOM fix."
+  - path: "src/styles.css"
+    change: "Chat header CSS overhaul (flex-column, chat-header-top, bigger stop button, 8px stat tracks, chat-stat-val, good/caution/danger fills). 10 new .si-* color classes. .stat-row .si svg 12px override."
+  - path: "docs/CHANGELOG.md"
+    change: "v0.8.1 entry"
+
+decisions_made:
+  - decision: "Error classification returns from closed set of curated strings"
+    rationale: "Security — never leak raw OpenAI error text to client. Each branch returns a fixed string, not err.message."
+  - decision: "Chat stat bars use good/caution/danger coloring (not morale/stamina classes)"
+    rationale: "Matches HUD color scheme. Green/amber/red communicates urgency better than static blue/green."
+  - decision: "HUD stat icons are 12px (smaller than 14px action icons)"
+    rationale: "Stat rows are compact — 14px icons would crowd the label text. 12px fits within the 36px label width."
+  - decision: "Speech bubbles use stable DOM (create/remove by ID) not innerHTML rebuild"
+    rationale: "innerHTML rebuild every 200ms re-triggers CSS animation = constant blinking. Stable DOM creates elements once and only adds/removes as needed."
+
+open_questions:
+  - "Do the new chat stat bar colors feel right in practice? May need tuning after playtest."
+  - "Should chat stat bars also show HYD/HUN/PAI/CLR in addition to MRL/STA?"
+  - "The STOP THE WORLD button text may be too long on narrow viewports — test at 540px."
+
+known_risks:
+  - "OpenAI Agents SDK may surface errors as stream events (not thrown exceptions) — classifyAgentError only handles thrown errors in the catch block. Raw errors may still bypass classification."
+  - "Speech bubble stagger uses setTimeout — bubbles fire on real-time schedule even if game is paused (pre-existing from v0.8.0)"
+  - "npm run validate broken on Node.js 25.6.1 (pre-existing)"
+
+explicitly_deferred:
+  - "Playtest v0.8.1 to verify all UI changes look right in-game — user ended session before playtest"
+  - "Speech bubble timing tuning — depends on playtest feedback"
+  - "Fix npm run validate for Node.js 25 — needs import.meta.env polyfill or conditional import"
+  - "Road visualization overhaul — documented in docs/ROADMAP_visualization.md, too large for one session"
+  - "Mobile/tablet testing of new chat header and stat icons"
+  - "Deploy v0.8.1 to Railway — user needs to restart server and deploy after verifying locally"
+
+next_actions:
+  - "Restart server (npm run server) to load new error classification code"
+  - "Test OpenAI connectivity (credits were just added)"
+  - "Playtest v0.8.1 — verify chat header layout, stat bars, STOP button, HUD tooltips, pee/poop icons, speech bubbles"
+  - "Deploy v0.8.1 to Railway"
+  - "Fix npm run validate for Node.js 25"
+  - "Begin road visualization overhaul (docs/ROADMAP_visualization.md)"
