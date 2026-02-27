@@ -341,16 +341,26 @@ function updateClarity(state: GameState, gameMinutes: number) {
   const p = state.player;
   const hours = state.world.hoursElapsed;
 
-  // No clarity loss before hour 16
-  if (hours < 16) return;
+  // No clarity loss before hour 6 — fatigue starts building after 6 hours of walking
+  if (hours < 6) return;
 
   let rate: number; // clarity loss per hour
-  if (hours < 24) rate = 1;
-  else if (hours < 36) rate = 2;
-  else if (hours < 48) rate = 3;
-  else rate = 4;
+  if (hours < 12) rate = 1.5;
+  else if (hours < 20) rate = 2.5;
+  else if (hours < 30) rate = 4;
+  else if (hours < 48) rate = 5;
+  else rate = 7;
+
+  // Pain accelerates mental fatigue
+  if (p.pain > 60) rate *= 1.3;
 
   p.clarity = Math.max(0, p.clarity - (rate * gameMinutes / 60));
+
+  // Low clarity effects: effort drift (your focus wavers)
+  if (p.clarity < 40 && Math.random() < 0.002 * gameMinutes) {
+    const drift = (Math.random() - 0.5) * 10;
+    p.effort = Math.max(0, Math.min(100, p.effort + drift));
+  }
 }
 
 // ============================================================
@@ -405,6 +415,7 @@ export function issueWarning(state: GameState) {
   const p = state.player;
   console.log(`[Engine] WARNING issued! ${p.warnings + 1}/3 at speed ${p.speed.toFixed(1)} mph, mile ${state.world.milesWalked.toFixed(1)}`);
   p.warnings++;
+  p.totalWarningsReceived++;
   p.warningTimer = 0;
   p.lastWarningTime = state.world.hoursElapsed;
   p.morale = Math.max(0, p.morale - 10);
@@ -422,6 +433,12 @@ export function issueWarning(state: GameState) {
 
   if (p.warnings >= 3) {
     p.alive = false;
+    // Determine cause based on what was failing
+    if (p.stamina <= 5) p.causeOfDeath = 'Third warning. Your body had nothing left to give.';
+    else if (p.morale <= 5) p.causeOfDeath = 'Third warning. You stopped caring whether you lived or died.';
+    else if (p.pain >= 90) p.causeOfDeath = 'Third warning. The pain made it impossible to keep pace.';
+    else if (p.clarity <= 15) p.causeOfDeath = 'Third warning. You barely knew where you were anymore.';
+    else p.causeOfDeath = 'Third warning. The soldiers don\'t give a fourth.';
     addNarrative(state,
       `Walker #100 — ${p.name} — Eliminated — Mile ${state.world.milesWalked.toFixed(1)}`,
       'elimination'
@@ -670,10 +687,10 @@ function issueNPCWarning(state: GameState, w: WalkerState) {
         addSpeechBubble(state, reactorData.name, reaction, 'warning_reaction', 'right', 8000);
       }
     }
-  } else if (data.tier <= 2) {
+  } else {
+    // Walker at a different position — always narrate (all tiers)
     addNarrative(state, `From the ${w.position} of the pack: ${announcement}`, 'warning');
   }
-  // Tier 3 at different position: silent (too many to narrate)
 }
 
 // ============================================================
@@ -716,11 +733,46 @@ function checkNPCEliminations(state: GameState) {
         // Brief adrenaline even from backstop (they fight it)
         npcWarningBoost.set(w.walkerNumber, 3);
       }
-      if (w.warnings >= 3) {
-        eliminateWalker(state, w, data);
+      // Queue for delayed elimination (same path as normal warnings)
+      if (w.warnings >= 3 && !pendingEliminations.has(w.walkerNumber)) {
+        pendingEliminations.set(w.walkerNumber, Date.now());
       }
     }
   }
+}
+
+// Generic motivations for walkers without backstory
+const GENERIC_MOTIVATIONS = [
+  'Walked for the Prize.',
+  'Walked on a dare.',
+  'Wanted to prove something.',
+  'Had nothing to lose.',
+  'Wanted to be remembered.',
+  'Couldn\'t say no.',
+  'Walked for someone back home.',
+  'Needed the money.',
+  'Wanted to see if he could.',
+  'Didn\'t know why he walked.',
+  'Walked to escape something worse.',
+  'Thought he was invincible.',
+];
+
+function getWalkerMotivation(data: import('./types').WalkerData): string {
+  // Tier 1 walkers have rich backstory — derive from it
+  const notes = data.backstoryNotes;
+  if (notes && data.tier <= 2) {
+    if (notes.includes('death wish') || notes.includes('self-destruct')) return 'Walked because living felt worse.';
+    if (notes.includes('wife') || notes.includes('Cathy') || notes.includes('baby')) return 'Walked for his wife and unborn child.';
+    if (notes.includes('father') || notes.includes('Squaded')) return 'Walked because his father couldn\'t.';
+    if (notes.includes('Priscilla') || notes.includes('scar')) return 'Walked to punish himself.';
+    if (notes.includes('prove') || notes.includes('strongest')) return 'Walked to prove he was the strongest.';
+    if (notes.includes('anger') || notes.includes('rage')) return 'Walked out of pure rage.';
+    if (notes.includes('quiet') || notes.includes('secret')) return 'Walked for reasons he kept to himself.';
+    if (notes.includes('dare') || notes.includes('bet')) return 'Walked on a dare.';
+    return 'Walked for his own reasons.';
+  }
+  // Tier 3: seeded random from generic list
+  return GENERIC_MOTIVATIONS[data.walkerNumber % GENERIC_MOTIVATIONS.length];
 }
 
 function eliminateWalker(state: GameState, w: WalkerState, data: import('./types').WalkerData) {
@@ -760,6 +812,18 @@ function eliminateWalker(state: GameState, w: WalkerState, data: import('./types
   if (data.tier <= 2) {
     addNarrative(state, elimText, 'narration');
   }
+
+  // Ticket popup — "getting your ticket punched"
+  state.activeTicket = {
+    walkerNumber: w.walkerNumber,
+    name: data.name,
+    homeState: data.homeState,
+    motivation: getWalkerMotivation(data),
+    mile: state.world.milesWalked,
+    placement: 100 - state.eliminationCount, // 99th, 98th, ...
+    tier: data.tier,
+    startTime: Date.now(),
+  };
 
   // Morale impact on player
   const relHit = w.isAlliedWithPlayer ? -30 : (w.relationship > 40 ? -15 : w.relationship > 10 ? -8 : -3);
@@ -820,7 +884,19 @@ function updateEnvironment(state: GameState) {
   // Terrain
   const seg = getRouteSegment(mile);
   if (state.world.terrain !== seg.terrain) {
+    const prevTerrain = state.world.terrain;
     state.world.terrain = seg.terrain;
+    // Notify player of terrain change
+    const terrainMessages: Record<string, string> = {
+      'uphill': 'The road tilts upward. You can feel it in your calves immediately.',
+      'downhill': 'The road slopes downhill. Gravity is on your side, but your knees pay the price.',
+      'rough': 'The road surface deteriorates. Cracked asphalt and potholes demand attention.',
+      'flat': prevTerrain === 'uphill' ? 'The hill levels out. Flat ground again. Your legs are grateful.'
+            : prevTerrain === 'downhill' ? 'The descent ends. Level road ahead.'
+            : 'The road smooths out. Flat terrain.',
+    };
+    const msg = terrainMessages[seg.terrain];
+    if (msg) addNarrative(state, msg, 'narration');
   }
 
   // Crowd

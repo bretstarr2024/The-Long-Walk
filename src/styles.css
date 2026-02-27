@@ -1242,6 +1242,7 @@ html, body {
 .si-talk { color: var(--accent-blue); }
 .si-think { color: var(--accent-purple); }
 .si-observe { color: var(--accent-amber); }
+.si-stretch { color: var(--accent-green); }
 .si-pee { color: #f0c040; }
 .si-poop { color: #a67c52; }
 .si-stamina { color: var(--accent-green); }
@@ -1440,6 +1441,14 @@ html, body {
   max-width: 600px;
   text-align: center;
   margin-bottom: 1rem;
+}
+
+.gameover-cause {
+  font-family: var(--font-narrative);
+  font-size: 0.9rem;
+  font-style: italic;
+  color: var(--accent-red);
+  margin-bottom: 1.5rem;
 }
 
 .gameover-stats {
@@ -2072,6 +2081,124 @@ html, body {
 }
 
 /* ============================================================
+   TICKET POPUP — Elimination notification
+   ============================================================ */
+
+#ticket-container {
+  position: fixed;
+  bottom: 120px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 160;
+  pointer-events: none;
+}
+
+.ticket-popup {
+  width: 260px;
+  animation: ticketSlide 0.5s ease;
+  filter: drop-shadow(0 4px 20px rgba(0, 0, 0, 0.7));
+}
+
+.ticket-perf-top,
+.ticket-perf-bottom {
+  height: 6px;
+  border-bottom: 2px dashed var(--text-dim);
+  margin: 0 8px;
+}
+.ticket-perf-bottom {
+  border-bottom: none;
+  border-top: 2px dashed var(--text-dim);
+}
+
+.ticket-body {
+  background: linear-gradient(135deg, #1a1d28 0%, #141720 50%, #1a1d28 100%);
+  border-left: 1px solid var(--border-accent);
+  border-right: 1px solid var(--border-accent);
+  padding: 0.9rem 1.1rem;
+  text-align: center;
+}
+
+.ticket-stamp {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.2rem;
+  color: var(--accent-red);
+  text-transform: uppercase;
+  border: 2px solid var(--accent-red);
+  border-radius: 3px;
+  padding: 0.15rem 0.5rem;
+  display: inline-block;
+  transform: rotate(-3deg);
+  margin-bottom: 0.6rem;
+  opacity: 0.85;
+}
+
+.ticket-number {
+  font-family: var(--font-mono);
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.ticket-name {
+  font-family: var(--font-narrative);
+  font-size: 1rem;
+  color: var(--text-primary);
+  margin-top: 0.15rem;
+}
+
+.ticket-detail {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--text-secondary);
+  letter-spacing: 0.05rem;
+  margin-top: 0.25rem;
+}
+
+.ticket-motivation {
+  font-family: var(--font-narrative);
+  font-size: 0.75rem;
+  font-style: italic;
+  color: var(--text-dim);
+  margin-top: 0.5rem;
+  line-height: 1.4;
+}
+
+.ticket-meta {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: var(--text-secondary);
+  margin-top: 0.6rem;
+  letter-spacing: 0.04rem;
+}
+
+.ticket-sep {
+  margin: 0 0.4rem;
+  color: var(--text-dim);
+}
+
+.ticket-fading {
+  animation: ticketFade 1.2s ease forwards;
+}
+
+@keyframes ticketSlide {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes ticketFade {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(-12px); }
+}
+
+@media (max-width: 700px) {
+  #ticket-container { bottom: 80px; }
+  .ticket-popup { width: 220px; }
+}
+
+/* ============================================================
    REDUCED MOTION — Accessibility
    ============================================================ */
 
@@ -2105,6 +2232,14 @@ html, body {
   }
 
   .warning-flash {
+    animation: none !important;
+  }
+
+  .ticket-popup {
+    animation: none !important;
+  }
+
+  .ticket-fading {
     animation: none !important;
   }
 }

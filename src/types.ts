@@ -119,6 +119,7 @@ export interface PlayerState {
   morale: number;        // 0-100
   clarity: number;       // 0-100
   warnings: number;      // 0-3
+  totalWarningsReceived: number; // lifetime count (never decremented)
   warningTimer: number;  // game-minutes walk-off counter (60 min above 4.0 to clear a warning)
   slowAccum: number;     // game-minutes accumulated below 4.0 mph (threshold → warning)
   lastWarningTime: number; // game-hours when last warning was issued (cooldown enforcement)
@@ -127,6 +128,7 @@ export interface PlayerState {
   foodCooldown: number;  // game-minutes until food can be requested
   waterCooldown: number; // game-minutes until water can be requested
   lastThinkMile: number; // mile of last "Think About Prize" action (cooldown)
+  lastStretchMile: number; // mile of last "Stretch" action (cooldown)
   alliances: number[];   // walker_numbers of allied NPCs
   bondedAlly: number | null;   // walker number of bonded ally (max 1)
   enemies: number[];           // walker numbers of active enemies
@@ -136,6 +138,7 @@ export interface PlayerState {
   activeCrisis: ActiveCrisis | null;
   lastCrisisMile: number;
   tempEffects: TempEffect[];
+  causeOfDeath: string | null; // set when player is eliminated
 }
 
 // --- Walker Arc System ---
@@ -400,6 +403,19 @@ export interface GameState {
   lastEnemyActionMile: number;   // mile of last enemy hostile action (cooldown)
   speechBubbles: SpeechBubble[];
   nextBubbleId: number;
+  activeTicket: TicketData | null;
+}
+
+// --- Ticket Popup (elimination) ---
+export interface TicketData {
+  walkerNumber: number;
+  name: string;
+  homeState: string;
+  motivation: string;
+  mile: number;
+  placement: number; // e.g., 99th, 98th
+  tier: 1 | 2 | 3;
+  startTime: number; // Date.now() for auto-dismiss
 }
 
 // --- Speech Bubble System ---

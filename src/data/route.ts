@@ -59,18 +59,18 @@ export const AMBIENT_DESCRIPTIONS = {
   terrain: {
     flat: [
       'The road stretches flat and featureless ahead.',
-      'Flat ground. Your legs are grateful.',
+      'Flat country. Mile after mile of nothing.',
       'The road runs straight as a ruler through flat country.',
     ],
     uphill: [
-      'The road tilts upward. Your calves burn immediately.',
+      'Your calves burn. The hill doesn\'t care.',
       'Another hill. The incline is gentle but relentless.',
-      'Uphill. Every step costs twice what it should.',
+      'Every step costs twice what it should on this grade.',
     ],
     downhill: [
-      'Downhill. Your knees take the punishment now.',
-      'The road slopes down. Gravity pulls you forward.',
-      'Downhill stretch. Your joints protest with every step.',
+      'Your knees take the punishment going downhill.',
+      'Gravity pulls you forward. Your joints protest.',
+      'The descent is almost worse than the climb.',
     ],
     rough: [
       'The road surface is cracked and uneven.',

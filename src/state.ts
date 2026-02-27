@@ -22,6 +22,7 @@ export function createDefaultPlayer(): PlayerState {
     morale: 75,
     clarity: 100,
     warnings: 0,
+    totalWarningsReceived: 0,
     warningTimer: 0,
     slowAccum: 0,
     lastWarningTime: -999,
@@ -30,6 +31,7 @@ export function createDefaultPlayer(): PlayerState {
     foodCooldown: 0,
     waterCooldown: 0,
     lastThinkMile: -10,
+    lastStretchMile: -10,
     alliances: [],
     bondedAlly: null,
     enemies: [],
@@ -39,6 +41,7 @@ export function createDefaultPlayer(): PlayerState {
     activeCrisis: null,
     lastCrisisMile: 0,
     tempEffects: [],
+    causeOfDeath: null,
   };
 }
 
@@ -125,6 +128,7 @@ export function createInitialGameState(): GameState {
     lastEnemyActionMile: 0,
     speechBubbles: [],
     nextBubbleId: 1,
+    activeTicket: null,
   };
 }
 

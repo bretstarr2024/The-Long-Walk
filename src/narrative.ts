@@ -757,13 +757,16 @@ export function getEndingText(ending: EndingType, state: GameState): { title: st
 }
 
 export function getGameStats(state: GameState): Record<string, string> {
+  // Count unique walkers talked to (more meaningful than raw conversation count)
+  const uniqueWalkers = new Set(state.conversationHistory.map(c => c.walkerNumber));
   return {
     'Miles Walked': state.world.milesWalked.toFixed(1),
     'Hours Survived': state.world.hoursElapsed.toFixed(1),
     'Walkers Outlasted': String(state.eliminationCount),
-    'Alliances Formed': String(state.conversationHistory.filter(c => state.player.alliances.includes(c.walkerNumber)).length > 0 ? state.player.alliances.length : 0),
+    'Alliances Formed': String(state.player.alliances.length),
     'Conversations Had': String(state.conversationHistory.length),
-    'Warnings Received': String(state.player.warnings),
+    'Walkers Talked To': String(uniqueWalkers.size),
+    'Warnings Received': String(state.player.totalWarningsReceived),
     'Day': String(state.world.dayNumber),
   };
 }

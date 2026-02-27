@@ -30,6 +30,7 @@ const ICON = {
   talk: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="8" rx="2" stroke="currentColor" stroke-width="1.3"/><path d="M5 11v2.5L8 11" stroke="currentColor" stroke-width="1.3"/></svg>',
   think: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="6" r="4" stroke="currentColor" stroke-width="1.3"/><path d="M6 10.5c0 1.5 1 2.5 2 2.5s2-1 2-2.5" stroke="currentColor" stroke-width="1.3"/><circle cx="7" cy="5.5" r="0.8" fill="currentColor"/><circle cx="9.5" cy="5.5" r="0.8" fill="currentColor"/></svg>',
   observe: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 8s2.5-4 6-4 6 4 6 4-2.5 4-6 4-6-4-6-4z" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.3"/></svg>',
+  stretch: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="3" r="1.5" stroke="currentColor" stroke-width="1.1"/><path d="M8 4.5v5M5 6l3 1.5 3-1.5M6 9.5l-1.5 4M10 9.5l1.5 4" stroke="currentColor" stroke-width="1.3"/></svg>',
   pee: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2C6.8 4.5 5 6.5 5 8.5a3 3 0 006 0C11 6.5 9.2 4.5 8 2z" stroke="currentColor" stroke-width="1.3" fill="none"/></svg>',
   poop: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M6 12h4a2 2 0 00-4 0z" stroke="currentColor" stroke-width="1.2" fill="none"/><path d="M5.5 10h5a1.5 1.5 0 00-5 0z" stroke="currentColor" stroke-width="1.2" fill="none"/><path d="M6.5 8h3a1.5 1.5 0 00-3 0z" stroke="currentColor" stroke-width="1.2" fill="none"/><circle cx="8" cy="5" r="1.2" stroke="currentColor" stroke-width="1.1" fill="none"/></svg>',
   // Stat icons (HUD + chat header)
@@ -169,6 +170,7 @@ function handleAction(action: string, state: GameState) {
     case 'send-chat': handleSendChat(state); break;
     case 'close-chat': closeLLMDialogue(state); break;
     case 'observe': handleObserve(state); break;
+    case 'stretch': handleStretch(state); break;
     case 'think': handleThink(state); break;
     case 'pause': state.isPaused = !state.isPaused; break;
     case 'toggle-pause-chat':
@@ -528,10 +530,19 @@ export function closeWalkerPicker() {
 export function closeLLMDialogue(state: GameState) {
   if (!state.llmDialogue) return;
   const dlg = state.llmDialogue;
-  // Increment conversation count if at least one exchange happened
+  // Increment conversation count and record in conversationHistory if at least one exchange happened
   if (dlg.messages.length >= 2) {
     const w = getWalkerState(state, dlg.walkerId);
-    if (w) w.conversationCount++;
+    if (w) {
+      w.conversationCount++;
+      state.conversationHistory.push({
+        walkerNumber: dlg.walkerId,
+        mile: state.world.milesWalked,
+        hour: state.world.hoursElapsed,
+        nodeId: 'llm_chat',
+        relationshipChange: 0,
+      });
+    }
   }
   const name = dlg.walkerName;
   state.llmDialogue = null;
@@ -754,6 +765,9 @@ function applyGameEffect(state: GameState, effect: { effectType: string; walkerI
 function handleObserve(state: GameState) {
   const seg = getRouteSegment(state.world.milesWalked);
   addNarrative(state, seg.notes, 'narration');
+  // Grounding yourself: small morale boost from observing the world
+  const boost = state.world.isNight ? 1 : 2;
+  state.player.morale = Math.min(100, state.player.morale + boost);
   const alive = state.walkers.filter(w => w.alive);
   const struggling = alive.filter(w => w.behavioralState === 'struggling' || w.behavioralState === 'breaking_down');
   if (struggling.length > 0) {
@@ -761,6 +775,26 @@ function handleObserve(state: GameState) {
     const d = getWalkerData(state, s.walkerNumber);
     if (d) addNarrative(state, `${d.name} (#${s.walkerNumber}) looks like they're struggling.`, 'narration');
   }
+}
+
+function handleStretch(state: GameState) {
+  const p = state.player;
+  if (p.pain < 5) return; // nothing to stretch out
+  if (p.lastStretchMile !== undefined && (state.world.milesWalked - p.lastStretchMile) < 3) return; // 3-mile cooldown
+
+  p.lastStretchMile = state.world.milesWalked;
+  const relief = Math.min(p.pain, 8 + Math.floor(Math.random() * 5)); // 8-12 pain relief
+  p.pain = Math.max(0, p.pain - relief);
+  // Small stamina cost — you slow your pace to stretch
+  p.stamina = Math.max(0, p.stamina - 2);
+
+  const narratives = [
+    'You roll your shoulders and stretch your legs mid-stride. The pain retreats — a little, for now.',
+    'You flex your ankles, massage your thighs without breaking stride. It helps. Marginally.',
+    'You work the knots out of your calves while walking. The relief is brief but real.',
+    'You arch your back, swing your arms. Joints pop. Some of the pain loosens its grip.',
+  ];
+  addNarrative(state, narratives[Math.floor(Math.random() * narratives.length)], 'narration');
 }
 
 function handleThink(state: GameState) {
@@ -1016,6 +1050,7 @@ function renderGame(state: GameState) {
   updateApproachBanner(state);
   updateCrisisOverlay(state);
   updateSpeechBubbles(state);
+  updateTicket(state);
   updateDialogueOverlay(state);
   updateLLMChatOverlay(state);
 
@@ -1053,6 +1088,7 @@ function createGameStructure() {
       <div id="scene-container"></div>
       <div id="approach-container"></div>
       <div id="speech-bubble-container"></div>
+      <div id="ticket-container"></div>
       <div id="crisis-container"></div>
       <div id="dialogue-container"></div>
       <div id="llm-chat-container"></div>
@@ -1441,6 +1477,10 @@ function updateActionsPanel(state: GameState) {
     }
   }
 
+  const stretchDisabled = inCrisis || p.pain < 5 || (p.lastStretchMile !== undefined && (state.world.milesWalked - p.lastStretchMile) < 3);
+  const stretchCd = !inCrisis && p.pain >= 5 && p.lastStretchMile !== undefined && (state.world.milesWalked - p.lastStretchMile) < 3
+    ? ` (${Math.ceil(3 - (state.world.milesWalked - p.lastStretchMile))}mi)` : '';
+
   const thinkDisabled = inCrisis || (state.world.milesWalked - p.lastThinkMile) < 5;
   const thinkCd = !inCrisis && (state.world.milesWalked - p.lastThinkMile) < 5
     ? ` (${Math.ceil(5 - (state.world.milesWalked - p.lastThinkMile))}mi)` : '';
@@ -1462,6 +1502,7 @@ function updateActionsPanel(state: GameState) {
     <button class="action-btn" data-action="poop" ${inCrisis || p.bowel < 20 ? 'disabled' : ''}>
       <span class="si si-poop">${ICON.poop}</span>Poop ${p.bowel >= 20 ? `(2 warnings)` : ''}
     </button>
+    <button class="action-btn" data-action="stretch" ${stretchDisabled ? 'disabled' : ''}><span class="si si-stretch">${ICON.stretch}</span>Stretch${stretchCd}</button>
     <button class="action-btn" data-action="observe" ${inCrisis ? 'disabled' : ''}><span class="si si-observe">${ICON.observe}</span>Look Around</button>
     <button class="action-btn" data-action="think" ${thinkDisabled ? 'disabled' : ''}><span class="si si-think">${ICON.think}</span>Prize${thinkCd}</button>
   `;
@@ -1760,6 +1801,64 @@ export function queueOverheardBubbles(state: GameState, lines: Array<{speaker: s
   }
 }
 
+// --- Ticket popup: elimination notification ---
+function updateTicket(state: GameState) {
+  const container = document.getElementById('ticket-container');
+  if (!container) return;
+
+  const ticket = state.activeTicket;
+  if (!ticket) {
+    if (container.innerHTML !== '') container.innerHTML = '';
+    return;
+  }
+
+  const now = Date.now();
+  const displayTime = ticket.tier <= 2 ? 8000 : 5000;
+  const age = now - ticket.startTime;
+
+  // Auto-dismiss
+  if (age > displayTime) {
+    state.activeTicket = null;
+    container.innerHTML = '';
+    return;
+  }
+
+  // Only create DOM once per ticket
+  if (!container.querySelector('.ticket-popup')) {
+    const ordinal = getOrdinal(ticket.placement);
+    container.innerHTML = `
+      <div class="ticket-popup" role="alert">
+        <div class="ticket-perf-top"></div>
+        <div class="ticket-body">
+          <div class="ticket-stamp">TICKET PUNCHED</div>
+          <div class="ticket-number">#${ticket.walkerNumber}</div>
+          <div class="ticket-name">${escapeHtml(ticket.name)}</div>
+          <div class="ticket-detail">${escapeHtml(ticket.homeState)}</div>
+          <div class="ticket-motivation">"${escapeHtml(ticket.motivation)}"</div>
+          <div class="ticket-meta">
+            <span>Mile ${ticket.mile.toFixed(1)}</span>
+            <span class="ticket-sep">|</span>
+            <span>${ordinal} to fall</span>
+          </div>
+        </div>
+        <div class="ticket-perf-bottom"></div>
+      </div>
+    `;
+  }
+
+  // Fade out during last 1.2s
+  const el = container.querySelector('.ticket-popup') as HTMLElement;
+  if (el && age > displayTime - 1200 && !el.classList.contains('ticket-fading')) {
+    el.classList.add('ticket-fading');
+  }
+}
+
+function getOrdinal(n: number): string {
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+
 // --- Crisis overlay: cached ---
 function updateCrisisOverlay(state: GameState) {
   const container = document.getElementById('crisis-container');
@@ -1983,7 +2082,7 @@ function updateChatSocialActions(state: GameState, walkerId: number) {
       <button class="social-btn" data-action="chat-share-water" ${waterDisabled ? 'disabled' : ''}><span class="si si-water">${ICON.water}</span>Water${waterDisabled ? ` (${Math.ceil(p.waterCooldown)}m)` : ''}</button>
       <button class="social-btn" data-action="chat-tell-story" ${storyDisabled ? 'disabled' : ''}><span class="si si-story">${ICON.story}</span>Story</button>
       <button class="social-btn" data-action="chat-encourage" ${encourageDisabled ? 'disabled' : ''}><span class="si si-encourage">${ICON.encourage}</span>Encourage</button>
-      ${walkTogetherAvail ? `<button class="social-btn ${w.walkingTogether ? 'active' : ''}" data-action="chat-walk-together"><span class="si si-walk">${ICON.walk}</span>${w.walkingTogether ? 'Walking \u2713' : 'Walk'}</button>` : ''}
+      ${walkTogetherAvail ? `<button class="social-btn ${w.walkingTogether ? 'active' : ''}" data-action="chat-walk-together"><span class="si si-walk">${ICON.walk}</span>${w.walkingTogether ? 'Walking \u2713' : 'Walk Together'}</button>` : ''}
       ${canProposeAlliance ? `<button class="social-btn alliance-btn" data-action="propose-alliance"><span class="si si-alliance">${ICON.alliance}</span>Alliance</button>` : ''}
       ${canProposeBond ? `<button class="social-btn bond-btn" data-action="propose-bond"><span class="si si-bond">${ICON.bond}</span>Bond</button>` : ''}
       ${canBreakAlliance ? `<button class="social-btn break-btn" data-action="break-alliance"><span class="si si-break">${ICON.breakIt}</span>Break</button>` : ''}
@@ -2193,10 +2292,14 @@ function renderGameOver(state: GameState) {
     `<div>${escapeHtml(k)}: <strong>${escapeHtml(v)}</strong></div>`
   ).join('');
 
+  const causeHtml = state.player.causeOfDeath
+    ? `<div class="gameover-cause">${escapeHtml(state.player.causeOfDeath)}</div>` : '';
+
   app.innerHTML = `
     <div class="screen-gameover">
       <div class="gameover-title ${isVictory ? 'victory' : 'defeat'}">${escapeHtml(title)}</div>
       <div class="gameover-text">${text.split('\n').map(l => `<p>${escapeHtml(l)}</p>`).join('')}</div>
+      ${causeHtml}
       <div class="gameover-stats">${statsHtml}</div>
       <button class="btn-restart" data-action="restart">WALK AGAIN</button>
     </div>

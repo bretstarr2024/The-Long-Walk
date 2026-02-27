@@ -634,10 +634,10 @@ export function updateVisualization(state: GameState, canvas: HTMLCanvasElement)
       const my2 = H * mp.yFrac;
       // Tick mark
       ctx.fillStyle = hudDim;
-      ctx.fillRect(markerX, my2 - 0.5, 6, 1);
-      // Mile number
+      ctx.fillRect(markerX, my2 - 0.5, 4, 1);
+      // Mile number (prefixed to avoid confusion with elevation)
       ctx.fillStyle = hudDim;
-      ctx.fillText(`${mp.mile}`, markerX + 8, my2 + 3);
+      ctx.fillText(`mi${mp.mile}`, markerX + 6, my2 + 3);
     }
   }
 

@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.8.4 — 2026-02-27
+
+Playtest-driven fixes — 10 bugs/features from production testing. Warning visibility, terrain feedback, ticket popup, pain management, clarity mechanics, game over stats.
+
+### Critical Fix
+- **NPC warnings visible for all tiers**: `issueNPCWarning` was silently eliminating Tier 3 walkers without narrating warnings. Now all tiers get narrated warnings. Backstop elimination routes through `pendingEliminations` delay queue
+
+### New Features
+- **Ticket popup on elimination**: Tear-off stub aesthetic with dashed perforation border, "TICKET PUNCHED" red stamp, walker name/number/state/motivation, mile and placement ordinal. Auto-dismiss 5s (Tier 3) or 8s (Tier 1/2) with fade-out animation
+- **Stretch action**: Pain management — 8-12 pain relief, -2 stamina cost, 3-mile cooldown. New stretch icon in actions panel
+
+### Improvements
+- **Terrain change notifications**: Narrative messages when terrain changes (uphill, downhill, rough, flat) with contextual descriptions
+- **GRADE meter clarity**: Mile markers prefixed "mi" to avoid confusion with elevation numbers. Ambient terrain descriptions updated to avoid contradicting terrain change notifications
+- **"Walk Together" label**: Walk button now says "Walk Together" for clarity
+- **Observe boosts morale**: +2 morale during day, +1 at night
+- **Clarity stat active**: Drain starts at hour 6 (was 16), faster rates, pain accelerates drain, low clarity causes random effort drift
+
+### Game Over Screen
+- **Cause of death**: Contextual death reason displayed (exhaustion, dehydration, starvation, pain, despair, confusion — based on which stat was failing)
+- **Accurate stats**: `totalWarningsReceived` lifetime counter (was showing current warnings at death). LLM conversations now tracked in `conversationHistory`. New "Walkers Talked To" stat (unique count)
+
 ## 0.8.3 — 2026-02-27
 
 Playtest fixes — 5 bugs from production testing.
