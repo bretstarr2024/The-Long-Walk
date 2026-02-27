@@ -30,6 +30,17 @@ const ICON = {
   talk: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="8" rx="2" stroke="currentColor" stroke-width="1.3"/><path d="M5 11v2.5L8 11" stroke="currentColor" stroke-width="1.3"/></svg>',
   think: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="6" r="4" stroke="currentColor" stroke-width="1.3"/><path d="M6 10.5c0 1.5 1 2.5 2 2.5s2-1 2-2.5" stroke="currentColor" stroke-width="1.3"/><circle cx="7" cy="5.5" r="0.8" fill="currentColor"/><circle cx="9.5" cy="5.5" r="0.8" fill="currentColor"/></svg>',
   observe: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 8s2.5-4 6-4 6 4 6 4-2.5 4-6 4-6-4-6-4z" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.3"/></svg>',
+  pee: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2C6.8 4.5 5 6.5 5 8.5a3 3 0 006 0C11 6.5 9.2 4.5 8 2z" stroke="currentColor" stroke-width="1.3" fill="none"/></svg>',
+  poop: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M6 12h4a2 2 0 00-4 0z" stroke="currentColor" stroke-width="1.2" fill="none"/><path d="M5.5 10h5a1.5 1.5 0 00-5 0z" stroke="currentColor" stroke-width="1.2" fill="none"/><path d="M6.5 8h3a1.5 1.5 0 00-3 0z" stroke="currentColor" stroke-width="1.2" fill="none"/><circle cx="8" cy="5" r="1.2" stroke="currentColor" stroke-width="1.1" fill="none"/></svg>',
+  // Stat icons (HUD + chat header)
+  stamina: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2v4l2.5 1.5" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.3"/></svg>',
+  hydration: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2.5C6.5 5.5 4 8 4 10.5a4 4 0 008 0C12 8 9.5 5.5 8 2.5z" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M6.5 10a1.5 1.5 0 003 0" stroke="currentColor" stroke-width="1"/></svg>',
+  hunger: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="3" y="5" width="10" height="7" rx="1.5" stroke="currentColor" stroke-width="1.3"/><path d="M5 5V3.5a3 3 0 016 0V5" stroke="currentColor" stroke-width="1.3" fill="none"/></svg>',
+  pain: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M4 8l2-4 2 8 2-8 2 4" stroke="currentColor" stroke-width="1.3" fill="none"/></svg>',
+  morale: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 4.5C7 3 5 2.5 3.8 3.8 2.5 5 2.8 7 8 11.5c5.2-4.5 5.5-6.5 4.2-7.7C11 2.5 9 3 8 4.5z" stroke="currentColor" stroke-width="1.3" fill="none"/></svg>',
+  clarity: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="7" r="3" stroke="currentColor" stroke-width="1.3"/><path d="M8 11v2M5.5 10.5l-1 1.5M10.5 10.5l1 1.5M4.5 5l-1.5-1M11.5 5l1.5-1M8 3V1" stroke="currentColor" stroke-width="1"/></svg>',
+  bladder: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M6 3c-1 2-2 4-2 6a4 4 0 008 0c0-2-1-4-2-6" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M7 13v1M9 13v1" stroke="currentColor" stroke-width="1.2"/></svg>',
+  bowel: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M5 4c0 2 3 2 3 4s-3 2-3 4" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M11 4c0 2-3 2-3 4s3 2 3 4" stroke="currentColor" stroke-width="1.3" fill="none"/></svg>',
 };
 
 // HTML entity escaping — prevents XSS from LLM/user text reaching innerHTML
@@ -1127,14 +1138,14 @@ function createStatusPanel(el: HTMLElement, state: GameState) {
       <span class="speed-display" id="sp-effort-val">${p.effort}%</span>
     </div>
     <div class="warning-display" id="sp-warnings"></div>
-    <div class="stat-row"><span class="stat-label" style="width:28px">STA</span><div class="stat-bar"><div class="stat-bar-fill" id="sp-bar-sta"></div></div><span class="stat-value" id="sp-val-sta" style="width:24px;text-align:right;font-size:0.7rem;"></span></div>
-    <div class="stat-row"><span class="stat-label" style="width:28px">HYD</span><div class="stat-bar"><div class="stat-bar-fill" id="sp-bar-hyd"></div></div><span class="stat-value" id="sp-val-hyd" style="width:24px;text-align:right;font-size:0.7rem;"></span></div>
-    <div class="stat-row"><span class="stat-label" style="width:28px">HUN</span><div class="stat-bar"><div class="stat-bar-fill" id="sp-bar-hun"></div></div><span class="stat-value" id="sp-val-hun" style="width:24px;text-align:right;font-size:0.7rem;"></span></div>
-    <div class="stat-row"><span class="stat-label" style="width:28px">PAI</span><div class="stat-bar"><div class="stat-bar-fill" id="sp-bar-pai"></div></div><span class="stat-value" id="sp-val-pai" style="width:24px;text-align:right;font-size:0.7rem;"></span></div>
-    <div class="stat-row"><span class="stat-label" style="width:28px">MOR</span><div class="stat-bar"><div class="stat-bar-fill" id="sp-bar-mor"></div></div><span class="stat-value" id="sp-val-mor" style="width:24px;text-align:right;font-size:0.7rem;"></span></div>
-    <div class="stat-row"><span class="stat-label" style="width:28px">CLR</span><div class="stat-bar"><div class="stat-bar-fill" id="sp-bar-clr"></div></div><span class="stat-value" id="sp-val-clr" style="width:24px;text-align:right;font-size:0.7rem;"></span></div>
-    <div class="stat-row"><span class="stat-label" style="width:28px">BDR</span><div class="stat-bar"><div class="stat-bar-fill" id="sp-bar-bdr"></div></div><span class="stat-value" id="sp-val-bdr" style="width:24px;text-align:right;font-size:0.7rem;"></span></div>
-    <div class="stat-row"><span class="stat-label" style="width:28px">BWL</span><div class="stat-bar"><div class="stat-bar-fill" id="sp-bar-bwl"></div></div><span class="stat-value" id="sp-val-bwl" style="width:24px;text-align:right;font-size:0.7rem;"></span></div>
+    <div class="stat-row" title="Stamina: Physical endurance. Lower effort to recover."><span class="stat-label" style="width:36px"><span class="si si-stamina">${ICON.stamina}</span> STA</span><div class="stat-bar"><div class="stat-bar-fill" id="sp-bar-sta"></div></div><span class="stat-value" id="sp-val-sta" style="width:24px;text-align:right;font-size:0.7rem;"></span></div>
+    <div class="stat-row" title="Hydration: Water level. Use Water action to restore."><span class="stat-label" style="width:36px"><span class="si si-hydration">${ICON.hydration}</span> HYD</span><div class="stat-bar"><div class="stat-bar-fill" id="sp-bar-hyd"></div></div><span class="stat-value" id="sp-val-hyd" style="width:24px;text-align:right;font-size:0.7rem;"></span></div>
+    <div class="stat-row" title="Hunger: Food level. Use Food action to restore."><span class="stat-label" style="width:36px"><span class="si si-hunger">${ICON.hunger}</span> HUN</span><div class="stat-bar"><div class="stat-bar-fill" id="sp-bar-hun"></div></div><span class="stat-value" id="sp-val-hun" style="width:24px;text-align:right;font-size:0.7rem;"></span></div>
+    <div class="stat-row" title="Pain: Physical suffering. Increases over time. Lower effort helps."><span class="stat-label" style="width:36px"><span class="si si-pain">${ICON.pain}</span> PAI</span><div class="stat-bar"><div class="stat-bar-fill" id="sp-bar-pai"></div></div><span class="stat-value" id="sp-val-pai" style="width:24px;text-align:right;font-size:0.7rem;"></span></div>
+    <div class="stat-row" title="Morale: Mental state. Talk to allies, tell stories, encourage."><span class="stat-label" style="width:36px"><span class="si si-morale">${ICON.morale}</span> MOR</span><div class="stat-bar"><div class="stat-bar-fill" id="sp-bar-mor"></div></div><span class="stat-value" id="sp-val-mor" style="width:24px;text-align:right;font-size:0.7rem;"></span></div>
+    <div class="stat-row" title="Clarity: Mental focus. Decreases when exhausted or dehydrated."><span class="stat-label" style="width:36px"><span class="si si-clarity">${ICON.clarity}</span> CLR</span><div class="stat-bar"><div class="stat-bar-fill" id="sp-bar-clr"></div></div><span class="stat-value" id="sp-val-clr" style="width:24px;text-align:right;font-size:0.7rem;"></span></div>
+    <div class="stat-row" title="Bladder: Use Pee action when full (costs 1 warning)."><span class="stat-label" style="width:36px"><span class="si si-bladder">${ICON.bladder}</span> BDR</span><div class="stat-bar"><div class="stat-bar-fill" id="sp-bar-bdr"></div></div><span class="stat-value" id="sp-val-bdr" style="width:24px;text-align:right;font-size:0.7rem;"></span></div>
+    <div class="stat-row" title="Bowel: Use Poop action when full (costs 2 warnings)."><span class="stat-label" style="width:36px"><span class="si si-bowel">${ICON.bowel}</span> BWL</span><div class="stat-bar"><div class="stat-bar-fill" id="sp-bar-bwl"></div></div><span class="stat-value" id="sp-val-bwl" style="width:24px;text-align:right;font-size:0.7rem;"></span></div>
     <div class="env-info">
       <div id="sp-weather"></div>
       <div id="sp-terrain"></div>
@@ -1453,10 +1464,10 @@ function updateActionsPanel(state: GameState) {
     </button>
     ${shareHtml}
     <button class="action-btn" data-action="pee" ${inCrisis || p.bladder < 20 ? 'disabled' : ''}>
-      Pee ${p.bladder >= 20 ? `(1 warning)` : ''}
+      <span class="si si-pee">${ICON.pee}</span>Pee ${p.bladder >= 20 ? `(1 warning)` : ''}
     </button>
     <button class="action-btn" data-action="poop" ${inCrisis || p.bowel < 20 ? 'disabled' : ''}>
-      Poop ${p.bowel >= 20 ? `(2 warnings)` : ''}
+      <span class="si si-poop">${ICON.poop}</span>Poop ${p.bowel >= 20 ? `(2 warnings)` : ''}
     </button>
     <button class="action-btn" data-action="observe" ${inCrisis ? 'disabled' : ''}><span class="si si-observe">${ICON.observe}</span>Look Around</button>
     <button class="action-btn" data-action="think" ${thinkDisabled ? 'disabled' : ''}><span class="si si-think">${ICON.think}</span>Prize${thinkCd}</button>
@@ -1687,7 +1698,7 @@ function updateApproachBanner(state: GameState) {
   approachCreated = true;
 }
 
-// --- Speech Bubble System ---
+// --- Speech Bubble System (stable DOM — create/remove by ID, no innerHTML rebuild) ---
 function updateSpeechBubbles(state: GameState) {
   const container = document.getElementById('speech-bubble-container');
   if (!container) return;
@@ -1697,19 +1708,32 @@ function updateSpeechBubbles(state: GameState) {
   // Remove expired bubbles
   state.speechBubbles = state.speechBubbles.filter(b => now - b.startTime < b.duration);
 
-  if (state.speechBubbles.length === 0) {
-    if (container.innerHTML !== '') container.innerHTML = '';
-    return;
+  // Remove DOM nodes for bubbles no longer in state
+  const activeIds = new Set(state.speechBubbles.map(b => `sb-${b.id}`));
+  for (const child of Array.from(container.children)) {
+    if (!activeIds.has(child.id)) container.removeChild(child);
   }
 
-  const bubblesHtml = state.speechBubbles.map(b => {
+  // Add new bubbles / update fade class on existing
+  for (const b of state.speechBubbles) {
+    const domId = `sb-${b.id}`;
+    let el = document.getElementById(domId);
     const age = now - b.startTime;
     const fadeOut = age > b.duration - 600;
-    const cls = `speech-bubble sb-${b.position} sb-${b.type}${fadeOut ? ' sb-fading' : ''}`;
-    return `<div class="${cls}"><div class="sb-speaker">${escapeHtml(b.speaker)}</div><div class="sb-text">${escapeHtml(b.text)}</div></div>`;
-  }).join('');
 
-  container.innerHTML = bubblesHtml;
+    if (!el) {
+      el = document.createElement('div');
+      el.id = domId;
+      el.className = `speech-bubble sb-${b.position} sb-${b.type}`;
+      el.innerHTML = `<div class="sb-speaker">${escapeHtml(b.speaker)}</div><div class="sb-text">${escapeHtml(b.text)}</div>`;
+      container.appendChild(el);
+    }
+
+    // Toggle fade class without rebuilding
+    if (fadeOut && !el.classList.contains('sb-fading')) {
+      el.classList.add('sb-fading');
+    }
+  }
 }
 
 export function addSpeechBubble(state: GameState, speaker: string, text: string, type: 'overheard' | 'warning_reaction', position: 'left' | 'right', durationMs = 6000) {
@@ -1864,21 +1888,25 @@ let chatOpenRelationship = 0;  // relationship value when chat opened (for trend
 
 function createLLMOverlay(container: HTMLElement, dlg: GameState['llmDialogue']) {
   if (!dlg) return;
-  const w = gameState?.walkers.find(ws => ws.walkerNumber === dlg.walkerId);
+  const state = gameState;
+  if (!state) return;
+  const w = state.walkers.find(ws => ws.walkerNumber === dlg.walkerId);
   const relLabel = !w ? '' : getRelationshipTier(w);
   const fillPct = !w ? 50 : ((w.relationship + 100) / 200) * 100;
   chatOpenRelationship = w ? w.relationship : 0;
+  const pMor = Math.round(state.player.morale);
+  const pSta = Math.round(state.player.stamina);
+  const wMor = w ? Math.round(w.morale) : 50;
+  const wSta = w ? Math.round(w.stamina) : 50;
 
   container.innerHTML = `
     <div class="dialogue-overlay" id="llm-overlay-bg">
       <div class="llm-chat-box" role="dialog" aria-modal="true">
         <button class="chat-close-btn" data-action="close-chat" aria-label="Close">&times;</button>
         <div class="llm-chat-header">
-          <div>
+          <div class="chat-header-top">
             <span class="dialogue-speaker" id="llm-speaker">${escapeHtml(dlg.walkerName)} (#${dlg.walkerId})</span>
-            <div style="display:flex;align-items:center;gap:0.3rem;">
-              <button class="stop-world-btn" data-action="toggle-pause-chat" id="llm-pause-btn">\u25A0 STOP</button>
-            </div>
+            <button class="stop-world-btn" data-action="toggle-pause-chat" id="llm-pause-btn">\u23F8 STOP THE WORLD</button>
           </div>
           <div class="chat-rel-row">
             <div class="rel-gauge">
@@ -1890,10 +1918,10 @@ function createLLMOverlay(container: HTMLElement, dlg: GameState['llmDialogue'])
             </div>
           </div>
           <div class="chat-stat-bars" id="chat-stat-bars">
-            <div class="chat-stat"><span class="chat-stat-lbl">YOU</span><span class="chat-stat-lbl">MRL</span><div class="chat-stat-track"><div class="chat-stat-fill morale" id="cs-p-morale" style="width:75%"></div></div></div>
-            <div class="chat-stat"><span class="chat-stat-lbl"></span><span class="chat-stat-lbl">STM</span><div class="chat-stat-track"><div class="chat-stat-fill stamina" id="cs-p-stamina" style="width:75%"></div></div></div>
-            <div class="chat-stat"><span class="chat-stat-lbl">THEM</span><span class="chat-stat-lbl">MRL</span><div class="chat-stat-track"><div class="chat-stat-fill morale" id="cs-w-morale" style="width:50%"></div></div></div>
-            <div class="chat-stat"><span class="chat-stat-lbl"></span><span class="chat-stat-lbl">STM</span><div class="chat-stat-track"><div class="chat-stat-fill stamina" id="cs-w-stamina" style="width:50%"></div></div></div>
+            <div class="chat-stat"><span class="chat-stat-lbl chat-stat-who">YOU</span><span class="chat-stat-lbl">MRL</span><div class="chat-stat-track"><div class="chat-stat-fill morale" id="cs-p-morale" style="width:${pMor}%"></div></div><span class="chat-stat-val" id="cs-p-morale-val">${pMor}</span></div>
+            <div class="chat-stat"><span class="chat-stat-lbl chat-stat-who"></span><span class="chat-stat-lbl">STA</span><div class="chat-stat-track"><div class="chat-stat-fill stamina" id="cs-p-stamina" style="width:${pSta}%"></div></div><span class="chat-stat-val" id="cs-p-stamina-val">${pSta}</span></div>
+            <div class="chat-stat"><span class="chat-stat-lbl chat-stat-who">THEM</span><span class="chat-stat-lbl">MRL</span><div class="chat-stat-track"><div class="chat-stat-fill morale" id="cs-w-morale" style="width:${wMor}%"></div></div><span class="chat-stat-val" id="cs-w-morale-val">${wMor}</span></div>
+            <div class="chat-stat"><span class="chat-stat-lbl chat-stat-who"></span><span class="chat-stat-lbl">STA</span><div class="chat-stat-track"><div class="chat-stat-fill stamina" id="cs-w-stamina" style="width:${wSta}%"></div></div><span class="chat-stat-val" id="cs-w-stamina-val">${wSta}</span></div>
           </div>
         </div>
         <div class="llm-chat-messages" id="llm-chat-messages">
@@ -2110,16 +2138,25 @@ function updateLLMChatOverlay(state: GameState) {
     }
   }
 
-  // Stat bars
+  // Stat bars — update width, numeric value, and color class
   const pMorale = document.getElementById('cs-p-morale');
   const pStamina = document.getElementById('cs-p-stamina');
   const wMorale = document.getElementById('cs-w-morale');
   const wStamina = document.getElementById('cs-w-stamina');
-  if (pMorale) pMorale.style.width = `${state.player.morale}%`;
-  if (pStamina) pStamina.style.width = `${state.player.stamina}%`;
+  const chatColor = (v: number) => v > 60 ? 'good' : v > 30 ? 'caution' : 'danger';
+  if (pMorale) { pMorale.style.width = `${state.player.morale}%`; pMorale.className = `chat-stat-fill ${chatColor(state.player.morale)}`; }
+  if (pStamina) { pStamina.style.width = `${state.player.stamina}%`; pStamina.className = `chat-stat-fill ${chatColor(state.player.stamina)}`; }
+  const pMoraleVal = document.getElementById('cs-p-morale-val');
+  const pStaminaVal = document.getElementById('cs-p-stamina-val');
+  if (pMoraleVal) pMoraleVal.textContent = String(Math.round(state.player.morale));
+  if (pStaminaVal) pStaminaVal.textContent = String(Math.round(state.player.stamina));
   if (w) {
-    if (wMorale) wMorale.style.width = `${w.morale}%`;
-    if (wStamina) wStamina.style.width = `${w.stamina}%`;
+    if (wMorale) { wMorale.style.width = `${w.morale}%`; wMorale.className = `chat-stat-fill ${chatColor(w.morale)}`; }
+    if (wStamina) { wStamina.style.width = `${w.stamina}%`; wStamina.className = `chat-stat-fill ${chatColor(w.stamina)}`; }
+    const wMoraleVal = document.getElementById('cs-w-morale-val');
+    const wStaminaVal = document.getElementById('cs-w-stamina-val');
+    if (wMoraleVal) wMoraleVal.textContent = String(Math.round(w.morale));
+    if (wStaminaVal) wStaminaVal.textContent = String(Math.round(w.stamina));
   }
 
   // Social action buttons
@@ -2128,7 +2165,7 @@ function updateLLMChatOverlay(state: GameState) {
   // "Stop the World" button state
   const pauseBtn = document.getElementById('llm-pause-btn');
   if (pauseBtn) {
-    const label = state.isPaused ? '\u25B6 RESUME' : '\u25A0 STOP';
+    const label = state.isPaused ? '\u25B6 RESUME' : '\u23F8 STOP THE WORLD';
     if (pauseBtn.textContent !== label) {
       pauseBtn.textContent = label;
       pauseBtn.classList.toggle('active', state.isPaused);

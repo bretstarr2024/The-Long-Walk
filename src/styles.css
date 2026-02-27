@@ -1013,41 +1013,48 @@ html, body {
 
 .llm-chat-header {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.4rem;
+  flex-direction: column;
+  gap: 0.3rem;
   padding: 0.75rem 1rem;
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
 }
+.chat-header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding-right: 2rem; /* space for close button */
+}
 
 .stop-world-btn {
   background: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
-  color: var(--text-dim);
+  border: 1px solid var(--accent-amber-dim);
+  color: var(--accent-amber);
   font-family: var(--font-mono);
-  font-size: 0.6rem;
-  padding: 0.2rem 0.5rem;
+  font-size: 0.65rem;
+  font-weight: 500;
+  padding: 0.3rem 0.7rem;
   cursor: pointer;
-  border-radius: 2px;
+  border-radius: 3px;
   transition: all 0.2s;
   white-space: nowrap;
 }
 .stop-world-btn.active {
   border-color: var(--accent-amber);
   color: var(--accent-amber);
-  background: rgba(212, 160, 32, 0.1);
+  background: rgba(212, 160, 32, 0.15);
+  font-weight: 700;
 }
 .stop-world-btn:hover {
   border-color: var(--accent-amber);
-  color: var(--accent-amber);
+  color: #ffd700;
+  background: rgba(212, 160, 32, 0.1);
 }
 
 /* --- Chat card: relationship gauge --- */
 .chat-rel-row {
-  padding: 0.3rem 1rem 0;
-  border-top: 1px solid var(--border-color);
+  padding: 0;
 }
 .rel-gauge {
   display: flex;
@@ -1097,20 +1104,34 @@ html, body {
   min-width: 2rem;
   text-align: right;
 }
+.chat-stat-who {
+  min-width: 2.5rem;
+}
 .chat-stat-track {
   flex: 1;
-  height: 4px;
+  height: 8px;
   background: var(--bg-tertiary);
-  border-radius: 2px;
+  border-radius: 3px;
   overflow: hidden;
 }
 .chat-stat-fill {
   height: 100%;
-  border-radius: 2px;
-  transition: width 0.3s ease;
+  border-radius: 3px;
+  transition: width 0.3s ease, background 0.3s ease;
 }
 .chat-stat-fill.morale { background: var(--accent-blue); }
 .chat-stat-fill.stamina { background: var(--accent-green); }
+.chat-stat-fill.good { background: var(--accent-green); }
+.chat-stat-fill.caution { background: var(--accent-amber); }
+.chat-stat-fill.danger { background: var(--accent-red); }
+.chat-stat-val {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: var(--text-secondary);
+  min-width: 1.5rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
 
 /* --- Chat card: social actions --- */
 .social-actions-row {
@@ -1165,6 +1186,17 @@ html, body {
 .si-talk { color: var(--accent-blue); }
 .si-think { color: var(--accent-purple); }
 .si-observe { color: var(--accent-amber); }
+.si-pee { color: #f0c040; }
+.si-poop { color: #a67c52; }
+.si-stamina { color: var(--accent-green); }
+.si-hydration { color: var(--accent-blue); }
+.si-hunger { color: var(--accent-amber); }
+.si-pain { color: var(--accent-red); }
+.si-morale { color: var(--accent-blue); }
+.si-clarity { color: var(--accent-purple); }
+.si-bladder { color: #f0c040; }
+.si-bowel { color: #a67c52; }
+.stat-row .si svg { width: 12px; height: 12px; }
 .social-btn.alliance-btn {
   border-color: var(--accent-green);
   color: var(--accent-green);

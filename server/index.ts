@@ -103,6 +103,29 @@ app.get('/api/health', (c) => {
   return c.json({ status: 'ok', model: 'gpt-5.2-chat-latest' });
 });
 
+// --- Error classifier — maps OpenAI errors to safe user-facing messages ---
+function classifyAgentError(err: any): string {
+  const msg = String(err?.message || err?.error?.message || '').toLowerCase();
+  const status = err?.status || err?.statusCode || 0;
+
+  if (status === 402 || msg.includes('quota') || msg.includes('billing') || msg.includes('insufficient_quota'))
+    return 'API quota exceeded \u2014 check billing';
+  if (status === 429 || msg.includes('rate limit') || msg.includes('rate_limit'))
+    return 'Rate limited \u2014 try again in a moment';
+  if (msg.includes('timeout') || msg.includes('timed out') || err?.name === 'AbortError')
+    return 'Agent timed out \u2014 try again';
+  if (status === 503 || msg.includes('overloaded') || msg.includes('unavailable'))
+    return 'Model temporarily unavailable \u2014 try again';
+  if (status === 401 || msg.includes('invalid api key') || msg.includes('authentication'))
+    return 'API authentication error \u2014 check server config';
+  if (msg.includes('content_filter') || msg.includes('content filter') || msg.includes('moderation'))
+    return 'Response filtered \u2014 try a different message';
+  if (msg.includes('context_length') || msg.includes('maximum context') || msg.includes('tokens'))
+    return 'Conversation too long \u2014 close and reopen chat';
+
+  return 'Agent failed \u2014 try again';
+}
+
 // --- Shared SSE response helper ---
 // Deduplicates the ReadableStream + SSE iteration pattern used by all 3 endpoints
 function createSSEResponse(
@@ -113,10 +136,9 @@ function createSSEResponse(
     walkerId?: number;
     onSuccess?: (fullText: string) => void;
     onError?: () => void;
-    errorMessage?: string;
   },
 ): Response {
-  const { effects, walkerId, onSuccess, onError, errorMessage = 'Agent failed' } = options || {};
+  const { effects, walkerId, onSuccess, onError } = options || {};
 
   return new Response(
     new ReadableStream({
@@ -165,7 +187,8 @@ function createSSEResponse(
           if (onError) {
             onError();
           }
-          send('error', JSON.stringify({ error: errorMessage }));
+          const safeMessage = classifyAgentError(err);
+          send('error', JSON.stringify({ error: safeMessage }));
           controller.close();
         }
       },
@@ -251,7 +274,6 @@ app.post('/api/chat/:walkerId', async (c) => {
     onError: () => {
       removeLastHistory(walkerId);
     },
-    errorMessage: 'Agent failed',
   });
 });
 
@@ -323,9 +345,7 @@ ${contextBlock}
     },
   ];
 
-  return createSSEResponse(overhearAgent, inputItems, {
-    errorMessage: 'Overhear failed',
-  });
+  return createSSEResponse(overhearAgent, inputItems);
 });
 
 // --- Approach endpoint (NPC initiates conversation with player) ---
@@ -396,9 +416,7 @@ Context: ${approachContext}
     },
   ];
 
-  return createSSEResponse(approachAgent, inputItems, {
-    errorMessage: 'Approach failed',
-  });
+  return createSSEResponse(approachAgent, inputItems);
 });
 
 // --- Static file serving (production) ---
