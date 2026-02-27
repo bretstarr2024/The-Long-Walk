@@ -1,0 +1,60 @@
+session_id: "2026-02-27-playtest-fixes-v085"
+date: "2026-02-27"
+branch: "main"
+version: "0.8.5"
+prior_session: "2026-02-27-playtest-fixes-v084"
+
+build_verification:
+  client_typescript: "pass"
+  server_typescript: "pass"
+  vite_build: "pass"
+
+commits:
+  - hash: "5e14656"
+    message: "feat(client): Ticket stacking, observe cooldown, warning reaction fix, stats fix (v0.8.5)"
+
+artifacts_updated:
+  - path: "src/types.ts"
+    change: "activeTicket → ticketQueue (TicketData[]). Added lastObserveMile to PlayerState."
+  - path: "src/state.ts"
+    change: "Default ticketQueue: [], lastObserveMile: -10."
+  - path: "src/engine.ts"
+    change: "ticketQueue.push() instead of activeTicket assignment. Warning reaction bubbles gated to w.warnings >= 3 (final warning only)."
+  - path: "src/ui.ts"
+    change: "updateTicket() rewritten for stacking queue — individual DOM elements by ID, 5s visible + 1.2s fade. handleObserve() 3-mile cooldown. Observe button disabled state + remaining miles display."
+  - path: "src/narrative.ts"
+    change: "Game over 'Warnings Received' uses player.warnings (active) instead of totalWarningsReceived (lifetime)."
+  - path: "src/styles.css"
+    change: "#ticket-container flex column-reverse with gap for stacking."
+  - path: "docs/CHANGELOG.md"
+    change: "v0.8.5 entry added."
+
+decisions_made:
+  - decision: "Flat 5s display time for all tickets regardless of tier"
+    rationale: "User reported tickets don't stay up long enough. Simpler than tier-based timing, and stacking handles rapid eliminations."
+  - decision: "Warning reaction bubbles only on 3rd/final warning"
+    rationale: "Lines like 'there goes another one' imply elimination — confusing on warnings 1 and 2 when the walker is still alive"
+  - decision: "Game over shows player.warnings not totalWarningsReceived"
+    rationale: "Showing 5 warnings when max is 3 (death) is confusing. Walked-off warnings aren't interesting on the death screen."
+  - decision: "Look Around gets 3-mile cooldown (same as Stretch)"
+    rationale: "Morale boost (+2) was spammable. 3 miles is short enough to use regularly but prevents rapid-fire clicking."
+
+open_questions:
+  - "Should ticket popup show for player death too, or just NPCs?"
+  - "Is the ticket stacking z-index (160) correct when many tickets overlap with crisis overlays?"
+
+known_risks:
+  - "Tier 3 NPC warnings may still flood narrative log during mass elimination phases"
+  - "Clarity drain at hour 6 may be too aggressive for new players"
+  - "npm run validate still fails on Node.js 25 (import.meta.env issue) — pre-existing, not blocking"
+
+explicitly_deferred:
+  - "Sweet spot indicator on effort meter — still open from v0.8.4"
+  - "Varied pleading voice per walker — still open from v0.8.3"
+  - "Ticket popup for player death — still open from v0.8.4"
+  - "totalWarningsReceived field kept in PlayerState but unused on game over screen — could be removed or repurposed later"
+
+next_actions:
+  - "Playtest v0.8.5 on production — verify ticket stacking during rapid eliminations, observe cooldown, warning reaction timing"
+  - "Monitor narrative log density during late-game mass eliminations"
+  - "Consider visualization roadmap or next round of playtest feedback"
