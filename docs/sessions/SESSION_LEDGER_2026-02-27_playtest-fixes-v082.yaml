@@ -1,0 +1,63 @@
+session_id: "2026-02-27-playtest-fixes-v082"
+date: "2026-02-27"
+branch: "main"
+version: "0.8.2"
+prior_session: "2026-02-27-chat-header-stat-icons"
+
+build_verification:
+  client_typescript: "pass"
+  server_typescript: "pass"
+  vite_build: "pass"
+
+commits:
+  - hash: "c3d1653"
+    message: "feat(client): Elimination timing, effort bar, bubble dissolve, 3 UX fixes (v0.8.2)"
+  - hash: "239e785"
+    message: "docs(changelog,skills): Add v0.8.2 entry, add Railway deploy to end-session"
+
+artifacts_updated:
+  - path: "src/engine.ts"
+    change: "pendingEliminations Map for 2s delay after 3rd warning; processPendingEliminations() export; scene delay in eliminateWalker; resetPendingEliminations in resetEngineGlobals"
+  - path: "src/main.ts"
+    change: "Music starts on title page (first gesture); elimination audio chain (warning voice → optional pleading → gunshot at elimination)"
+  - path: "src/audio.ts"
+    change: "playPleading() with 5 plea texts via Web Speech API; cancelSpeech() to cut off pleading"
+  - path: "src/ui.ts"
+    change: "Effort bar replaced slider with click-to-set meter; clearApproachBanner() helper; Story action relationship gate removed; speech bubble durations doubled"
+  - path: "src/styles.css"
+    change: "effort-meter/effort-arrow CSS matching speed meter; bubbleDissolve animation (1.5s with blur stages)"
+  - path: "src/narrative.ts"
+    change: "sceneBlockedUntil guard in checkScriptedEvents"
+  - path: "src/types.ts"
+    change: "sceneBlockedUntil: number added to GameState"
+  - path: "src/state.ts"
+    change: "sceneBlockedUntil: 0 in initial state"
+  - path: "docs/CHANGELOG.md"
+    change: "v0.8.2 entry added"
+  - path: ".claude/skills/end-session/SKILL.md"
+    change: "Step 3d added: Railway deploy with health check"
+
+decisions_made:
+  - decision: "2s delay for elimination after 3rd warning (not 1s or 3s)"
+    rationale: "Matches the dramatic pacing — enough time for warning voice to finish, optional pleading to start, before gunshot cuts it off"
+  - decision: "30% chance of pleading (not 50% or 100%)"
+    rationale: "Keeps it from becoming routine/annoying while still being impactful when it occurs"
+  - decision: "Effort meter as clickable bar (not restored slider with new styling)"
+    rationale: "User explicitly wanted it to match the speed bar visually — same height, corners, width. A bar with arrows inside was the natural match"
+  - decision: "clearApproachBanner() clears DOM directly instead of through render cycle"
+    rationale: "The render guard (cachedApproachHtml check) was preventing cleanup because handlers cleared the cache before render could detect it needed clearing"
+
+open_questions:
+  - "Should pleading voice vary (different voice per walker) or stay uniform?"
+  - "Should the effort meter show sweet spot zone indicator like the speed meter danger line?"
+
+known_risks:
+  - "Web Speech API pleading depends on browser voice availability — may be silent on some systems"
+  - "sceneBlockedUntil uses Date.now() (wall clock) while game uses performance.now() — mixing clocks is fine here since delays are short (2s) but could drift under tab backgrounding"
+
+explicitly_deferred: []
+
+next_actions:
+  - "Playtest v0.8.2 on production — verify elimination timing chain feels right"
+  - "Playtest effort bar click-to-set UX — verify arrows and click positioning work intuitively"
+  - "Continue with visualization roadmap or next round of playtest feedback"
