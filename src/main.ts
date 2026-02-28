@@ -13,6 +13,7 @@ import { closeDialogue } from './dialogue';
 import { isServerAvailable } from './agentClient';
 import { resolveCrisis } from './crises';
 import { GameState } from './types';
+import { getWalkerData } from './state';
 import {
   initAudio, ensureResumed, startAmbientDrone, stopAmbientDrone,
   updateDroneIntensity, calculateIntensity,
@@ -119,7 +120,9 @@ function gameLoop(timestamp: number) {
           playWarningVoice(match[1]);
           // 30% chance of pleading after a 3rd/final warning
           if (match[1].includes('Final warning') && Math.random() < 0.3) {
-            setTimeout(() => playPleading(), 1500);
+            const numMatch = match[1].match(/warning,?\s*(\d+)/);
+            const walkerAge = numMatch ? getWalkerData(state, Number(numMatch[1]))?.age : undefined;
+            setTimeout(() => playPleading(walkerAge), 1500);
           }
         } else {
           playWarningBuzzer();
@@ -152,6 +155,13 @@ function gameLoop(timestamp: number) {
     const ending = checkEnding(state);
     if (ending) {
       setEnding(ending);
+      state.screen = 'gameover';
+    }
+  }
+
+  // Delayed gameover transition: show player death ticket first
+  if (state.playerDeathTime > 0 && state.screen === 'game') {
+    if (Date.now() - state.playerDeathTime > 6200) {
       state.screen = 'gameover';
     }
   }

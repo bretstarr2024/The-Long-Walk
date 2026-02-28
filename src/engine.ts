@@ -443,7 +443,18 @@ export function issueWarning(state: GameState) {
       `Walker #100 — ${p.name} — Eliminated — Mile ${state.world.milesWalked.toFixed(1)}`,
       'elimination'
     );
-    state.screen = 'gameover';
+    // Show player death ticket before transitioning to gameover
+    state.ticketQueue.push({
+      walkerNumber: 100,
+      name: p.name,
+      homeState: 'You',
+      motivation: p.causeOfDeath,
+      mile: state.world.milesWalked,
+      placement: 100 - state.eliminationCount,
+      tier: 1,
+      startTime: Date.now(),
+    });
+    state.playerDeathTime = Date.now();
   }
 }
 

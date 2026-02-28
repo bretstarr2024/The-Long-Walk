@@ -405,6 +405,7 @@ export interface GameState {
   speechBubbles: SpeechBubble[];
   nextBubbleId: number;
   ticketQueue: TicketData[];
+  playerDeathTime: number;  // Date.now() when player eliminated, 0 = alive
 }
 
 // --- Ticket Popup (elimination) ---

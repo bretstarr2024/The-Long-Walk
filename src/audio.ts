@@ -560,12 +560,21 @@ const PLEAS = [
   "Wait! Wait, I'm speeding up! Look, I'm—",
 ];
 
-export function playPleading(): boolean {
+export function playPleading(age?: number): boolean {
   if (isMuted || typeof speechSynthesis === 'undefined') return false;
   const text = PLEAS[Math.floor(Math.random() * PLEAS.length)];
   const utterance = new SpeechSynthesisUtterance(text);
-  utterance.rate = 1.2;  // fast, panicked
-  utterance.pitch = 0.9; // low male voice
+  // Vary voice by age: young = higher/faster, older = deeper/slower
+  if (age !== undefined && age <= 17) {
+    utterance.rate = 1.3;
+    utterance.pitch = 1.1;
+  } else if (age !== undefined && age > 25) {
+    utterance.rate = 1.0;
+    utterance.pitch = 0.7;
+  } else {
+    utterance.rate = 1.2;
+    utterance.pitch = 0.9;
+  }
   utterance.volume = 0.7;
   const voices = speechSynthesis.getVoices();
   const maleEnglish = voices.find(

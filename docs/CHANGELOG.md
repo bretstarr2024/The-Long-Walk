@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.9.0 — 2026-02-28
+
+Three deferred features implemented — sweet spot indicator, varied pleading voices, and player death ticket.
+
+### New Features
+- **Sweet spot indicator on effort meter**: CSS `::after` pseudo-element renders a subtle green-tinted zone at 58-68% effort on the effort bar, showing the optimal stamina efficiency range. Pure CSS, no JS changes
+- **Varied pleading voice per walker**: `playPleading(age?)` now varies Web Speech API pitch and rate by walker age — young walkers (≤17) sound higher and more panicked, older walkers (>25) sound deeper and slower. Walker number parsed from warning text to look up age
+- **Player death ticket**: When the player is eliminated, their ticket popup is shown for 5 seconds before transitioning to the gameover screen. Uses the existing ticket queue system — `issueWarning()` pushes a player ticket and sets `playerDeathTime` instead of immediately switching to gameover. Game simulation freezes during the ticket display
+
+### Fix
+- **Game over warnings stat reverted**: "Warnings Received" restored to `totalWarningsReceived` (lifetime count including walked-off warnings) per user preference
+
 ## 0.8.5 — 2026-02-27
 
 Playtest fixes — ticket stacking, observe cooldown, warning reaction timing, game over stat accuracy.

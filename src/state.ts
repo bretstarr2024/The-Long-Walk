@@ -130,6 +130,7 @@ export function createInitialGameState(): GameState {
     speechBubbles: [],
     nextBubbleId: 1,
     ticketQueue: [],
+    playerDeathTime: 0,
   };
 }
 
