@@ -5,7 +5,7 @@
 
 import { GameState, ActiveCrisis, CrisisOption, CrisisType, CrisisEffects, TempEffect } from './types';
 import { addNarrative, getWalkerData, getWalkerState } from './state';
-import { issueWarning } from './engine';
+import { issueWarning, issueWarningRaw } from './engine';
 
 // ============================================================
 // CONFIG
@@ -935,10 +935,7 @@ export function resolveCrisis(state: GameState, optionId: string) {
       addNarrative(state, `You shove ${eName} back. Hard. Both of you stumble. The soldiers notice.`, 'narration');
     }
     if (Math.random() < 0.4 && state.player.warnings < 2) {
-      state.player.warnings++;
-      state.player.lastWarningTime = state.world.hoursElapsed;
-      state.player.slowAccum = 0;
-      state.lastWarningMile = state.world.milesWalked;
+      issueWarningRaw(state);
       const warnText = state.player.warnings === 1
         ? '"Warning! Warning 100!"'
         : '"Warning! Second warning, 100!"';
@@ -1040,7 +1037,7 @@ function applyEffects(state: GameState, effects: CrisisEffects, targetWalker?: n
         // Check if alliance breaks from strain
         if (w.allyStrain > 80 && Math.random() < 0.20) {
           w.isAlliedWithPlayer = false;
-          w.relationship = Math.max(0, w.relationship - 30);
+          w.relationship = Math.max(-100, w.relationship - 30);
           p.alliances = p.alliances.filter(n => n !== w.walkerNumber);
           const name = getWalkerData(state, w.walkerNumber)?.name || `Walker #${w.walkerNumber}`;
           addNarrative(state, `${name} pulls away. "I can't keep carrying you. I'm sorry." The alliance is broken.`, 'narration');

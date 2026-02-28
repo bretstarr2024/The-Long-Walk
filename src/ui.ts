@@ -2,14 +2,15 @@
 // The Long Walk — UI Renderer (Event Delegation + Cached Updates)
 // ============================================================
 
-import { GameState, PlayerState, WalkerState, PackPosition, Reason } from './types';
+import { GameState, PlayerState, WalkerState, PackPosition, Reason, STAT_LABELS } from './types';
 import { getNearbyWalkers, getWalkerData, getWalkerState, getWalkersRemaining, getRelationshipTier, addNarrative } from './state';
-import { setPlayerSpeed, setPlayerEffort, setPlayerPosition, requestFood, requestWater, shareFood, shareWater, playerPee, playerPoop, formAlliance, breakAlliance, formBond } from './engine';
+import { setPlayerSpeed, setPlayerEffort, setPlayerPosition, requestFood, requestWater, shareFood, shareWater, playerPee, playerPoop, formAlliance, breakAlliance, formBond, issueWarning, issueWarningRaw } from './engine';
 import { startDialogue, selectDialogueOption, closeDialogue } from './dialogue';
 import { getEndingText, getGameStats, EndingType } from './narrative';
 import { getRouteSegment } from './data/route';
-import { initVisualization, updateVisualization } from './visualization';
-import { sendMessage, isServerAvailable, type WalkerProfile, type GameContextForAgent } from './agentClient';
+import { initVisualization, updateVisualization, getWalkerProximity } from './visualization';
+import { sendMessage, isServerAvailable } from './agentClient';
+import { buildGameContext, buildWalkerProfile } from './contextBuilder';
 import { toggleMute, getIsMuted } from './audio';
 import { resolveCrisis } from './crises';
 
@@ -241,6 +242,16 @@ function getChatWalker(state: GameState): WalkerState | undefined {
   return getWalkerState(state, state.llmDialogue!.walkerId);
 }
 
+/** Push a player action + NPC reaction into the chat overlay so the user sees feedback. */
+function pushChatReaction(state: GameState, actionText: string, npcReaction: string) {
+  const dlg = state.llmDialogue;
+  if (!dlg) return;
+  dlg.messages.push({ role: 'player', text: actionText });
+  dlg.messages.push({ role: 'walker', text: npcReaction });
+}
+
+function pick<T>(arr: T[]): T { return arr[Math.floor(Math.random() * arr.length)]; }
+
 function handleChatShareFood(state: GameState) {
   const w = getChatWalker(state);
   if (!w || !w.alive || state.player.foodCooldown > 0) return;
@@ -253,6 +264,12 @@ function handleChatShareFood(state: GameState) {
   const name = data?.name || `Walker #${w.walkerNumber}`;
   addNarrative(state, `You hand your food concentrate to ${name}. They eat it without a word. You won't eat for thirty minutes.`, 'narration');
   w.playerActions.push(`Shared food at mile ${Math.round(state.world.milesWalked)}`);
+  pushChatReaction(state, `[Shared food with ${name}]`, pick([
+    `${name} takes it without looking at you. Chews mechanically. Then, quietly: "...thanks."`,
+    `${name} eats. Says nothing for a while. But their step is a little steadier.`,
+    `"You sure?" ${name} doesn't wait for an answer. The food is gone in seconds.`,
+    `${name} nods once. No words. But the look says enough.`,
+  ]));
   cachedSocialActionsHtml = '';
 }
 
@@ -268,6 +285,12 @@ function handleChatShareWater(state: GameState) {
   const name = data?.name || `Walker #${w.walkerNumber}`;
   addNarrative(state, `You pass your canteen to ${name}. They drink deep. You'll go without for fifteen minutes.`, 'narration');
   w.playerActions.push(`Shared water at mile ${Math.round(state.world.milesWalked)}`);
+  pushChatReaction(state, `[Shared water with ${name}]`, pick([
+    `${name} drinks deep. Wipes their mouth. "I owe you one."`,
+    `${name} takes the canteen with shaking hands. Drinks. Hands it back without a word.`,
+    `"God, I needed that." ${name} breathes easier.`,
+    `${name} drinks. Closes their eyes for a second. "Thank you."`,
+  ]));
   cachedSocialActionsHtml = '';
 }
 
@@ -289,6 +312,12 @@ function handleChatTellStory(state: GameState) {
   ];
   addNarrative(state, stories[Math.floor(Math.random() * stories.length)], 'narration');
   w.playerActions.push(`Told a story at mile ${Math.round(state.world.milesWalked)}`);
+  pushChatReaction(state, `[Told ${name} a story]`, pick([
+    `${name} listens. Really listens. "Tell me another one. Later."`,
+    `${name} laughs — short, surprised. "I needed that. Keep talking."`,
+    `"That reminds me of—" ${name} starts, then stops. Smiles instead.`,
+    `${name} walks a little closer after that.`,
+  ]));
   cachedSocialActionsHtml = '';
 }
 
@@ -307,6 +336,12 @@ function handleChatEncourage(state: GameState) {
     `"One foot in front of the other." ${name} manages a thin smile.`,
   ];
   addNarrative(state, encouragements[Math.floor(Math.random() * encouragements.length)], 'narration');
+  pushChatReaction(state, `[Encouraged ${name}]`, pick([
+    `${name} nods. Doesn't say anything. But their jaw tightens with new resolve.`,
+    `"Yeah." ${name} squares their shoulders. "Yeah, okay."`,
+    `${name} glances at you. Something shifts behind their eyes. They walk a little taller.`,
+    `"Easy for you to say." But ${name} picks up the pace anyway.`,
+  ]));
   cachedSocialActionsHtml = '';
 }
 
@@ -319,8 +354,18 @@ function handleChatWalkTogether(state: GameState) {
   const name = data?.name || `Walker #${w.walkerNumber}`;
   if (w.walkingTogether) {
     addNarrative(state, `You fall into step beside ${name}. Walking together.`, 'narration');
+    pushChatReaction(state, `[Walking together with ${name}]`, pick([
+      `${name} matches your stride. Neither of you says anything. You don't need to.`,
+      `"Alright then." ${name} falls in beside you. Step for step.`,
+      `${name} nods. Side by side. The road feels a little less long.`,
+    ]));
   } else {
     addNarrative(state, `You drift apart from ${name}. Back to walking alone.`, 'narration');
+    pushChatReaction(state, `[Stopped walking with ${name}]`, pick([
+      `${name} watches you go. Says nothing.`,
+      `"See you around." ${name} lets the gap grow between you.`,
+      `${name} drifts back to their own pace. The road opens up between you.`,
+    ]));
   }
   cachedSocialActionsHtml = '';
 }
@@ -378,10 +423,7 @@ function handleHostileAction(state: GameState, actionType: import('./types').Pla
       addNarrative(state, `"Warning! ${w.warnings === 1 ? 'Warning' : 'Second warning,'} ${w.walkerNumber}!"`, 'warning');
       // Player risks warning (60% chance)
       if (Math.random() < 0.6 && p.warnings < 2) {
-        p.warnings++;
-        p.lastWarningTime = state.world.hoursElapsed;
-        p.slowAccum = 0;
-        state.lastWarningMile = state.world.milesWalked;
+        issueWarningRaw(state);
         addNarrative(state, `The soldier sees you too. "Warning! ${p.warnings === 1 ? 'Warning' : 'Second warning,'} ${p.walkerNumber}!"`, 'warning');
         addNarrative(state, `Your foot catches ${name}'s ankle. They stumble. So do you.`, 'narration');
       } else {
@@ -400,10 +442,7 @@ function handleHostileAction(state: GameState, actionType: import('./types').Pla
       w.warningTimer = 0; // Prevent NPC warning system from cascading to 3rd warning
       addNarrative(state, `"Warning! ${w.warnings === 1 ? 'Warning' : 'Second warning,'} ${w.walkerNumber}!"`, 'warning');
       if (Math.random() < 0.4 && p.warnings < 2) {
-        p.warnings++;
-        p.lastWarningTime = state.world.hoursElapsed;
-        p.slowAccum = 0;
-        state.lastWarningMile = state.world.milesWalked;
+        issueWarningRaw(state);
         addNarrative(state, `"Warning! ${p.warnings === 1 ? 'Warning' : 'Second warning,'} ${p.walkerNumber}!"`, 'warning');
         addNarrative(state, `You grab from ${name}'s belt. They lunge. The soldiers see both of you.`, 'narration');
       } else {
@@ -429,13 +468,27 @@ function handleProposeAlliance(state: GameState) {
     // Too soon — refused with relationship penalty
     w.relationship = Math.max(-100, w.relationship - 15);
     addNarrative(state, `You ask ${name} to walk together. An alliance. They look away. "I don't think so. Not yet." The rejection stings.`, 'narration');
+    pushChatReaction(state, `[Proposed alliance with ${name}]`, pick([
+      `${name} looks away. "I don't think so. Not yet."`,
+      `"We barely know each other." ${name} shakes their head.`,
+      `${name} gives you a long look. "Ask me again later. Maybe."`,
+    ]));
   } else if (w.relationship < 60 && Math.random() < 0.5) {
     // Borderline — 50% chance refused
     w.relationship = Math.max(-100, w.relationship - 5);
     addNarrative(state, `You propose an alliance to ${name}. They hesitate. "Maybe later." It wasn't a no, but it wasn't a yes.`, 'narration');
+    pushChatReaction(state, `[Proposed alliance with ${name}]`, pick([
+      `${name} hesitates. "Maybe later." Not a no. Not a yes.`,
+      `"I need to think about it." ${name} won't meet your eyes.`,
+    ]));
   } else {
     // Accepted
     formAlliance(state, w.walkerNumber);
+    pushChatReaction(state, `[Proposed alliance with ${name}]`, pick([
+      `${name} extends a hand. You shake it. "Together, then."`,
+      `"Yeah. Alright. Let's do this." ${name} falls in beside you.`,
+      `${name} nods slowly. "Watch my back. I'll watch yours."`,
+    ]));
   }
   cachedSocialActionsHtml = '';
 }
@@ -445,7 +498,14 @@ function handleProposeBond(state: GameState) {
   if (!w || !w.alive || !w.isAlliedWithPlayer || w.isBonded) return;
   if (state.player.bondedAlly !== null) return;
 
+  const data = getWalkerData(state, w.walkerNumber);
+  const name = data?.name || `Walker #${w.walkerNumber}`;
   formBond(state, w.walkerNumber);
+  pushChatReaction(state, `[Proposed bond with ${name}]`, pick([
+    `${name}'s voice is barely a whisper. "To the end, then. Whatever that means."`,
+    `"You and me." ${name} grips your arm. "All the way."`,
+    `${name} doesn't speak. Just nods. You both know what this means.`,
+  ]));
   cachedSocialActionsHtml = '';
 }
 
@@ -453,7 +513,14 @@ function handleBreakAlliance(state: GameState) {
   const w = getChatWalker(state);
   if (!w || !w.isAlliedWithPlayer || w.isBonded) return;
 
+  const data = getWalkerData(state, w.walkerNumber);
+  const name = data?.name || `Walker #${w.walkerNumber}`;
   breakAlliance(state, w.walkerNumber);
+  pushChatReaction(state, `[Broke alliance with ${name}]`, pick([
+    `${name} stares at you. "Fine. Walk alone then." The gap opens between you.`,
+    `"After everything—" ${name} stops. Turns away. "Forget it."`,
+    `${name} doesn't say a word. Just... drifts away. Cold.`,
+  ]));
   cachedSocialActionsHtml = '';
 }
 
@@ -520,6 +587,15 @@ function handleWalkerPicked(state: GameState, walkerNumber: number) {
   addNarrative(state, dismissals[Math.floor(Math.random() * dismissals.length)], 'narration');
 }
 
+export function closeDossier(): boolean {
+  if (activeDossierWalker !== null) {
+    activeDossierWalker = null;
+    cachedActionsHtml = '';
+    return true;
+  }
+  return false;
+}
+
 export function closeWalkerPicker() {
   if (walkerPickerOpen) {
     walkerPickerOpen = false;
@@ -554,96 +630,6 @@ export function closeLLMDialogue(state: GameState) {
   }
 }
 
-function buildGameContext(state: GameState, walkerNum: number): GameContextForAgent {
-  const w = getWalkerState(state, walkerNum)!;
-  const remaining = getWalkersRemaining(state);
-  const recentEvents = state.narrativeLog
-    .slice(-10)
-    .filter(e => e.type === 'elimination' || e.type === 'event' || e.type === 'warning')
-    .map(e => e.text);
-
-  // Compute arc phase for this walker
-  const walkerData = getWalkerData(state, walkerNum);
-  let arcPhase: string | undefined;
-  let arcPromptHint: string | undefined;
-  if (walkerData?.arcStages) {
-    const mile = state.world.milesWalked;
-    const convos = w.conversationCount;
-    // Find the latest arc stage the walker qualifies for (mile + conversations)
-    for (let i = walkerData.arcStages.length - 1; i >= 0; i--) {
-      const stage = walkerData.arcStages[i];
-      if (mile >= stage.mileRange[0] && convos >= stage.minConversations) {
-        arcPhase = stage.arcPhase;
-        arcPromptHint = stage.promptHint;
-        break;
-      }
-    }
-    // Fallback: if no stage matched (mile advanced past range but convos insufficient),
-    // use the latest stage whose mile range the walker has entered
-    if (!arcPhase) {
-      for (let i = walkerData.arcStages.length - 1; i >= 0; i--) {
-        const stage = walkerData.arcStages[i];
-        if (mile >= stage.mileRange[0]) {
-          arcPhase = stage.arcPhase;
-          arcPromptHint = stage.promptHint;
-          break;
-        }
-      }
-    }
-  }
-
-  return {
-    milesWalked: state.world.milesWalked,
-    hoursElapsed: state.world.hoursElapsed,
-    currentTime: state.world.currentTime,
-    dayNumber: state.world.dayNumber,
-    isNight: state.world.isNight,
-    weather: state.world.weather,
-    terrain: state.world.terrain,
-    crowdDensity: state.world.crowdDensity,
-    crowdMood: state.world.crowdMood,
-    currentAct: state.world.currentAct,
-    horrorTier: state.world.horrorTier,
-    walkersRemaining: remaining,
-    playerName: state.player.name,
-    playerWarnings: state.player.warnings,
-    playerMorale: Math.round(state.player.morale),
-    playerStamina: Math.round(state.player.stamina),
-    walkerWarnings: w.warnings,
-    walkerMorale: Math.round(w.morale),
-    walkerStamina: Math.round(w.stamina),
-    walkerRelationship: w.relationship,
-    walkerBehavioralState: w.behavioralState,
-    recentEvents,
-    // Arc context
-    arcPhase,
-    arcPromptHint,
-    conversationCount: w.conversationCount,
-    revealedFacts: w.revealedFacts.length > 0 ? w.revealedFacts : undefined,
-    playerActions: w.playerActions.length > 0 ? w.playerActions : undefined,
-    isAllied: w.isAlliedWithPlayer || undefined,
-    isBonded: w.isBonded || undefined,
-    isEnemy: w.isEnemy || undefined,
-    allyStrain: w.isAlliedWithPlayer ? w.allyStrain : undefined,
-  };
-}
-
-function buildWalkerProfile(state: GameState, walkerNum: number): WalkerProfile {
-  const d = getWalkerData(state, walkerNum)!;
-  return {
-    name: d.name,
-    walkerNumber: d.walkerNumber,
-    age: d.age,
-    homeState: d.homeState,
-    tier: d.tier,
-    personalityTraits: d.personalityTraits,
-    dialogueStyle: d.dialogueStyle,
-    backstoryNotes: d.backstoryNotes,
-    psychologicalArchetype: d.psychologicalArchetype,
-    alliancePotential: d.alliancePotential,
-  };
-}
-
 async function handleSendChat(state: GameState) {
   if (!state.llmDialogue || state.llmDialogue.isStreaming) return;
 
@@ -661,7 +647,7 @@ async function handleSendChat(state: GameState) {
   dlg.isStreaming = true;
   dlg.streamBuffer = '';
 
-  const walkerProfile = buildWalkerProfile(state, dlg.walkerId);
+  const walkerProfile = buildWalkerProfile(state, dlg.walkerId)!;
   const gameCtx = buildGameContext(state, dlg.walkerId);
 
   try {
@@ -784,6 +770,7 @@ function handleObserve(state: GameState) {
 function handleStretch(state: GameState) {
   const p = state.player;
   if (p.pain < 5) return; // nothing to stretch out
+  if (p.warnings >= 2) return; // too dangerous — would risk elimination
   if (p.lastStretchMile !== undefined && (state.world.milesWalked - p.lastStretchMile) < 3) return; // 3-mile cooldown
 
   p.lastStretchMile = state.world.milesWalked;
@@ -793,12 +780,13 @@ function handleStretch(state: GameState) {
   p.stamina = Math.max(0, p.stamina - 2);
 
   const narratives = [
-    'You roll your shoulders and stretch your legs mid-stride. The pain retreats — a little, for now.',
-    'You flex your ankles, massage your thighs without breaking stride. It helps. Marginally.',
-    'You work the knots out of your calves while walking. The relief is brief but real.',
-    'You arch your back, swing your arms. Joints pop. Some of the pain loosens its grip.',
+    'You slow down to stretch your legs properly. The pain retreats — but the soldiers notice.',
+    'You stop mid-stride to work the knots from your calves. Worth it. The warning was expected.',
+    'You arch your back, roll your shoulders. The relief is real — so is the warning that follows.',
+    'You take a moment to stretch. Joints pop. Pain loosens. A soldier marks something on his clipboard.',
   ];
   addNarrative(state, narratives[Math.floor(Math.random() * narratives.length)], 'narration');
+  issueWarning(state); // Slowing/stopping to stretch costs a warning
 }
 
 function handleThink(state: GameState) {
@@ -1444,9 +1432,14 @@ function updateActionsPanel(state: GameState) {
       const tierLabel = d.tier === 1 ? 'T1' : d.tier === 2 ? 'T2' : 'T3';
       const tierClass = d.tier <= 2 ? 'tier-major' : 'tier-minor';
       const allyBadge = w.isAlliedWithPlayer ? ' <span class="walker-ally-badge">ALLY</span>' : '';
+      const prox = getWalkerProximity(state, w.walkerNumber);
+      const proxLabel = prox === 'whisper' ? '<span class="prox-badge prox-whisper">WHISPER</span>'
+        : prox === 'talk' ? '<span class="prox-badge prox-talk">TALK</span>'
+        : prox === 'shout' ? '<span class="prox-badge prox-shout">SHOUT</span>'
+        : '<span class="prox-badge prox-none">OUT OF RANGE</span>';
       return `
         <button class="picker-item" data-pick-walker="${w.walkerNumber}">
-          <span class="picker-name">${d.name} <span class="picker-num">#${w.walkerNumber}</span>${allyBadge}</span>
+          <span class="picker-name">${d.name} <span class="picker-num">#${w.walkerNumber}</span>${allyBadge} ${proxLabel}</span>
           <span class="picker-info"><span class="picker-tier ${tierClass}">${tierLabel}</span> <span class="walker-disposition ${rel}">${rel}</span></span>
         </button>`;
     }).join('');
@@ -1481,7 +1474,7 @@ function updateActionsPanel(state: GameState) {
     }
   }
 
-  const stretchDisabled = inCrisis || p.pain < 5 || (p.lastStretchMile !== undefined && (state.world.milesWalked - p.lastStretchMile) < 3);
+  const stretchDisabled = inCrisis || p.pain < 5 || p.warnings >= 2 || (p.lastStretchMile !== undefined && (state.world.milesWalked - p.lastStretchMile) < 3);
   const stretchCd = !inCrisis && p.pain >= 5 && p.lastStretchMile !== undefined && (state.world.milesWalked - p.lastStretchMile) < 3
     ? ` (${Math.ceil(3 - (state.world.milesWalked - p.lastStretchMile))}mi)` : '';
 
@@ -2033,10 +2026,10 @@ function createLLMOverlay(container: HTMLElement, dlg: GameState['llmDialogue'])
             </div>
           </div>
           <div class="chat-stat-bars" id="chat-stat-bars">
-            <div class="chat-stat"><span class="chat-stat-lbl chat-stat-who">YOU</span><span class="chat-stat-lbl">MRL</span><div class="chat-stat-track"><div class="chat-stat-fill morale" id="cs-p-morale" style="width:${pMor}%"></div></div><span class="chat-stat-val" id="cs-p-morale-val">${pMor}</span></div>
-            <div class="chat-stat"><span class="chat-stat-lbl chat-stat-who"></span><span class="chat-stat-lbl">STA</span><div class="chat-stat-track"><div class="chat-stat-fill stamina" id="cs-p-stamina" style="width:${pSta}%"></div></div><span class="chat-stat-val" id="cs-p-stamina-val">${pSta}</span></div>
-            <div class="chat-stat"><span class="chat-stat-lbl chat-stat-who">THEM</span><span class="chat-stat-lbl">MRL</span><div class="chat-stat-track"><div class="chat-stat-fill morale" id="cs-w-morale" style="width:${wMor}%"></div></div><span class="chat-stat-val" id="cs-w-morale-val">${wMor}</span></div>
-            <div class="chat-stat"><span class="chat-stat-lbl chat-stat-who"></span><span class="chat-stat-lbl">STA</span><div class="chat-stat-track"><div class="chat-stat-fill stamina" id="cs-w-stamina" style="width:${wSta}%"></div></div><span class="chat-stat-val" id="cs-w-stamina-val">${wSta}</span></div>
+            <div class="chat-stat"><span class="chat-stat-lbl chat-stat-who">YOU</span><span class="chat-stat-lbl">${STAT_LABELS.morale}</span><div class="chat-stat-track"><div class="chat-stat-fill morale" id="cs-p-morale" style="width:${pMor}%"></div></div><span class="chat-stat-val" id="cs-p-morale-val">${pMor}</span></div>
+            <div class="chat-stat"><span class="chat-stat-lbl chat-stat-who"></span><span class="chat-stat-lbl">${STAT_LABELS.stamina}</span><div class="chat-stat-track"><div class="chat-stat-fill stamina" id="cs-p-stamina" style="width:${pSta}%"></div></div><span class="chat-stat-val" id="cs-p-stamina-val">${pSta}</span></div>
+            <div class="chat-stat"><span class="chat-stat-lbl chat-stat-who">THEM</span><span class="chat-stat-lbl">${STAT_LABELS.morale}</span><div class="chat-stat-track"><div class="chat-stat-fill morale" id="cs-w-morale" style="width:${wMor}%"></div></div><span class="chat-stat-val" id="cs-w-morale-val">${wMor}</span></div>
+            <div class="chat-stat"><span class="chat-stat-lbl chat-stat-who"></span><span class="chat-stat-lbl">${STAT_LABELS.stamina}</span><div class="chat-stat-track"><div class="chat-stat-fill stamina" id="cs-w-stamina" style="width:${wSta}%"></div></div><span class="chat-stat-val" id="cs-w-stamina-val">${wSta}</span></div>
           </div>
         </div>
         <div class="llm-chat-messages" id="llm-chat-messages">
@@ -2161,6 +2154,7 @@ function updateLLMChatOverlay(state: GameState) {
   // Append new messages (append-only — never rebuild)
   // Check if streaming element can be promoted to a permanent message
   let streamEl = msgsEl.querySelector('.streaming') as HTMLElement | null;
+  const hadNewMessages = renderedChatMsgCount < dlg.messages.length;
 
   while (renderedChatMsgCount < dlg.messages.length) {
     const m = dlg.messages[renderedChatMsgCount];
@@ -2205,6 +2199,7 @@ function updateLLMChatOverlay(state: GameState) {
       streamEl.appendChild(sender);
       streamEl.appendChild(text);
       msgsEl.appendChild(streamEl);
+      msgsEl.scrollTop = msgsEl.scrollHeight;
       llmStreamingShown = true;
     } else {
       // Update streaming text
@@ -2217,9 +2212,14 @@ function updateLLMChatOverlay(state: GameState) {
     llmStreamingShown = false;
   }
 
-  // Scroll to bottom only if user hasn't scrolled up (within 50px of bottom)
-  const isNearBottom = msgsEl.scrollHeight - msgsEl.scrollTop - msgsEl.clientHeight < 50;
-  if (isNearBottom) msgsEl.scrollTop = msgsEl.scrollHeight;
+  // Always scroll when new messages were added this tick.
+  // For streaming updates, only scroll if user hasn't scrolled up.
+  if (hadNewMessages) {
+    msgsEl.scrollTop = msgsEl.scrollHeight;
+  } else {
+    const isNearBottom = msgsEl.scrollHeight - msgsEl.scrollTop - msgsEl.clientHeight < 50;
+    if (isNearBottom) msgsEl.scrollTop = msgsEl.scrollHeight;
+  }
 
   // Update input/button disabled state directly (no rebuild)
   const inp = document.getElementById('llm-chat-input') as HTMLInputElement;

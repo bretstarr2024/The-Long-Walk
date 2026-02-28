@@ -1,5 +1,43 @@
 # Changelog
 
+## 0.9.1 — 2026-02-28
+
+Green phosphor radar visualization overhaul + full 8-category audit remediation (3 criticals, 15 warnings across 12 files).
+
+### Visualization Overhaul — Green Phosphor Radar
+- **Complete visual redesign**: Replaced thermal satellite view with CRT green phosphor radar aesthetic — dark background (#0a0a0a), phosphor green (#00ff41) palette, scanline overlay, vignette effect
+- **Radar sweep**: Rotating radar sweep line with phosphor glow trail, centered on player position
+- **Walker rendering**: Condition-based color coding (bright green → amber → red → dim), pulsing animation for player dot, alliance/enemy ring indicators
+- **Terrain strip**: Left-edge terrain profile with phosphor color coding and grade labels
+- **Weather FX**: Rain streaks, fog layers, cold tint — all in phosphor green palette
+- **Geiger counter audio**: Ambient clicking that intensifies based on nearby walker danger (warnings, low stamina). New `GeigerController` class in audio.ts with proximity-based tick rate
+- **CRT CSS effects**: Scanline overlay, text-shadow glow, vignette corners via CSS on visualization container
+
+### Critical Fixes
+- **Player warning bypass**: Trip, steal, and retaliate actions incremented `p.warnings++` directly, skipping `totalWarningsReceived`, morale drain, and 3rd-warning death logic. New `issueWarningRaw()` in engine.ts handles all side effects without duplicate narrative
+- **Duplicated context builders**: `buildGameContext()` and `buildWalkerProfile()` copied in 3 files (ui.ts, overhear.ts, approach.ts). Extracted to shared `contextBuilder.ts` — ~200 lines of duplication removed
+- **Missing arc fallback in approach.ts**: Approach endpoint lacked the two-pass arc phase computation, causing NPC approaches to lose arc context when miles outpaced conversation count. Fixed automatically by shared context builder
+
+### Server Security Hardening
+- **Global error handler**: `app.onError()` catches unhandled route errors, returns safe 500
+- **CSP + HSTS headers**: Content-Security-Policy and Strict-Transport-Security added to all responses
+- **Server-side timeout**: 60s `Promise.race()` timeout on OpenAI `run()` calls in `createSSEResponse()`
+- **Zod schema validation**: All 3 endpoints (chat, overhear, approach) validate walker profiles and game context payloads with Zod schemas
+- **Approach type whitelist**: Server rejects unknown approach types with 400
+
+### Bug Fixes
+- **Elimination scene setTimeout guard**: Added `!state.llmDialogue` check — scenes no longer queue during active LLM chat
+- **Visualization O(n) elimination count**: `state.walkers.filter(w => !w.alive).length` → `state.eliminationCount`
+- **Alliance strain-break floor**: Relationship floor changed from `Math.max(0,...)` to `Math.max(-100,...)` — broken alliances can now properly become enemies
+- **Olson/Barkovitch arc overlaps**: Crisis and farewell mileRanges no longer overlap (Olson: 95-105/105-115, Barkovitch: 230-245/245-255)
+- **Stale timing comment**: "2s for dramatic timing" corrected to "8s" in engine.ts
+
+### UX Improvements
+- **Dossier dismissible via Escape**: New `closeDossier()` export, added to Escape key priority chain in main.ts
+- **Introduction approach window**: Extended from mile 20 to mile 30 (matches Act 1 boundary)
+- **Overhear overlay guard**: Ambient overheards blocked during active crisis, dialogue, scene, or approach overlays
+- **Write-only flags documented**: TODO comment on `set_flag` tool noting flags are write-only, kept for future use
+
 ## 0.9.0 — 2026-02-28
 
 Three deferred features implemented — sweet spot indicator, varied pleading voices, and player death ticket.

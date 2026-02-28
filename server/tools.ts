@@ -48,6 +48,7 @@ export function createEffectsScope() {
     },
   });
 
+  // TODO: conversationFlags are write-only (set here, never read by client). Keep for future use.
   const setFlag = tool({
     name: 'set_flag',
     description: 'Set a narrative flag to remember something important about this conversation. Use for tracking promises, secrets shared, or emotional bonds.',

@@ -12,9 +12,63 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { readFileSync } from 'fs';
 import { Agent, run } from '@openai/agents';
 import { setDefaultOpenAIKey } from '@openai/agents';
+import { z } from 'zod';
 import { getOrCreateAgent, getHistory, addToHistory, removeLastHistory } from './agents';
 import { buildGameContextBlock, type WalkerProfile, type GameContext } from './prompts';
 import { createEffectsScope, type GameEffect } from './tools';
+
+// --- Input validation schemas ---
+const WalkerProfileSchema = z.object({
+  name: z.string().min(1).max(100),
+  walkerNumber: z.number().int().min(1).max(100),
+  age: z.number().int().min(13).max(19),
+  homeState: z.string().min(1).max(100),
+  tier: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+  personalityTraits: z.array(z.string()).max(10),
+  dialogueStyle: z.string().max(500),
+  backstoryNotes: z.string().max(1000),
+  psychologicalArchetype: z.string().max(100),
+  alliancePotential: z.string().max(50),
+});
+
+const GameContextSchema = z.object({
+  milesWalked: z.number().min(0).max(500),
+  hoursElapsed: z.number().min(0),
+  currentTime: z.string(),
+  dayNumber: z.number().int().min(1),
+  isNight: z.boolean(),
+  weather: z.string(),
+  terrain: z.string(),
+  crowdDensity: z.string(),
+  crowdMood: z.string(),
+  currentAct: z.number().int().min(1).max(4),
+  horrorTier: z.number().int().min(0),
+  walkersRemaining: z.number().int().min(1).max(100),
+  playerName: z.string().min(1).max(50),
+  playerWarnings: z.number().int().min(0).max(3),
+  playerMorale: z.number().min(0).max(100),
+  playerStamina: z.number().min(0).max(100),
+  walkerWarnings: z.number().int().min(0).max(3),
+  walkerMorale: z.number().min(0).max(100),
+  walkerStamina: z.number().min(0).max(100),
+  walkerRelationship: z.number().min(-100).max(100),
+  walkerBehavioralState: z.string(),
+  recentEvents: z.array(z.string()).max(20),
+  arcPhase: z.string().optional(),
+  arcPromptHint: z.string().optional(),
+  conversationCount: z.number().int().optional(),
+  revealedFacts: z.array(z.string()).optional(),
+  playerActions: z.array(z.string()).optional(),
+  isAllied: z.boolean().optional(),
+  isBonded: z.boolean().optional(),
+  isEnemy: z.boolean().optional(),
+  allyStrain: z.number().optional(),
+});
+
+const VALID_APPROACH_TYPES = new Set([
+  'arc_milestone', 'elimination_reaction', 'warning_check', 'vulnerability',
+  'offer_alliance', 'crisis_aftermath', 'introduction', 'proximity', 'enemy_confrontation',
+]);
 
 // --- Config ---
 const MODEL = 'gpt-5.2-chat-latest';
@@ -66,12 +120,20 @@ setInterval(() => {
 // --- Hono App ---
 const app = new Hono();
 
+// Global error handler — catches unhandled errors in any route
+app.onError((err, c) => {
+  console.error('[Server] Unhandled error:', err.message);
+  return c.json({ error: 'Internal server error' }, 500);
+});
+
 // Security headers middleware
 app.use('*', async (c, next) => {
   await next();
   c.res.headers.set('X-Content-Type-Options', 'nosniff');
   c.res.headers.set('X-Frame-Options', 'DENY');
   c.res.headers.set('Referrer-Policy', 'no-referrer');
+  c.res.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  c.res.headers.set('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'");
 });
 
 // CORS for Vite dev server — restrict to known origins
@@ -149,7 +211,13 @@ function createSSEResponse(
         };
 
         try {
-          const result = await run(agentOrRun, inputItems as any, { stream: true });
+          const timeoutMs = 60_000;
+          const result = await Promise.race([
+            run(agentOrRun, inputItems as any, { stream: true }),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error('Agent timed out after 60s')), timeoutMs)
+            ),
+          ]);
 
           let fullText = '';
 
@@ -230,9 +298,12 @@ app.post('/api/chat/:walkerId', async (c) => {
     return c.json({ error: 'Message too long (max 1000 characters)' }, 400);
   }
 
-  // Player name validation
-  if (gameContext.playerName && gameContext.playerName.length > 50) {
-    return c.json({ error: 'Player name too long (max 50 characters)' }, 400);
+  // Structured validation
+  try {
+    WalkerProfileSchema.parse(walker);
+    GameContextSchema.parse(gameContext);
+  } catch {
+    return c.json({ error: 'Invalid request data' }, 400);
   }
 
   // Create request-scoped effects accumulator + tools (closure-bound, no shared state)
@@ -296,6 +367,15 @@ app.post('/api/overhear', async (c) => {
   // Scene prompt length validation
   if (scenePrompt.length > 500) {
     return c.json({ error: 'Scene prompt too long (max 500 characters)' }, 400);
+  }
+
+  // Structured validation
+  try {
+    WalkerProfileSchema.parse(walkerA);
+    WalkerProfileSchema.parse(walkerB);
+    GameContextSchema.parse(gameContext);
+  } catch {
+    return c.json({ error: 'Invalid request data' }, 400);
   }
 
   const contextBlock = buildGameContextBlock(gameContext, true); // skip walker state for overhear
@@ -364,9 +444,22 @@ app.post('/api/approach', async (c) => {
     return c.json({ error: 'Missing walker, gameContext, approachType, or approachContext' }, 400);
   }
 
+  // Approach type whitelist
+  if (!VALID_APPROACH_TYPES.has(approachType)) {
+    return c.json({ error: 'Invalid approach type' }, 400);
+  }
+
   // Approach context length validation
   if (approachContext.length > 500) {
     return c.json({ error: 'Approach context too long (max 500 characters)' }, 400);
+  }
+
+  // Structured validation
+  try {
+    WalkerProfileSchema.parse(walker);
+    GameContextSchema.parse(gameContext);
+  } catch {
+    return c.json({ error: 'Invalid request data' }, 400);
   }
 
   const contextBlock = buildGameContextBlock(gameContext);

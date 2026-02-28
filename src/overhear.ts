@@ -4,9 +4,10 @@
 // ============================================================
 
 import { GameState } from './types';
-import { addNarrative, getWalkerData, getWalkerState, getWalkersRemaining } from './state';
+import { addNarrative, getWalkerData, getWalkerState } from './state';
 import { queueOverheardBubbles } from './ui';
-import { requestOverhear, type WalkerProfile, type GameContextForAgent } from './agentClient';
+import { requestOverhear } from './agentClient';
+import { buildGameContext, buildWalkerProfile } from './contextBuilder';
 import { NPC_RELATIONSHIPS } from './data/walkers';
 
 // --- Config ---
@@ -64,50 +65,6 @@ function pickScenePrompt(state: GameState): string {
   return prompts[Math.floor(Math.random() * prompts.length)];
 }
 
-function buildWalkerProfile(state: GameState, walkerNum: number): WalkerProfile | null {
-  const data = getWalkerData(state, walkerNum);
-  if (!data) return null;
-  return {
-    name: data.name,
-    walkerNumber: data.walkerNumber,
-    age: data.age,
-    homeState: data.homeState,
-    tier: data.tier,
-    personalityTraits: data.personalityTraits,
-    dialogueStyle: data.dialogueStyle,
-    backstoryNotes: data.backstoryNotes,
-    psychologicalArchetype: data.psychologicalArchetype,
-    alliancePotential: data.alliancePotential,
-  };
-}
-
-function buildGameContext(state: GameState): GameContextForAgent {
-  return {
-    milesWalked: state.world.milesWalked,
-    hoursElapsed: state.world.hoursElapsed,
-    currentTime: state.world.currentTime,
-    dayNumber: state.world.dayNumber,
-    isNight: state.world.isNight,
-    weather: state.world.weather,
-    terrain: state.world.terrain,
-    crowdDensity: state.world.crowdDensity,
-    crowdMood: state.world.crowdMood,
-    currentAct: state.world.currentAct,
-    horrorTier: state.world.horrorTier,
-    walkersRemaining: getWalkersRemaining(state),
-    playerName: state.player.name,
-    playerWarnings: state.player.warnings,
-    playerMorale: Math.round(state.player.morale),
-    playerStamina: Math.round(state.player.stamina),
-    walkerWarnings: 0,
-    walkerMorale: 0,
-    walkerStamina: 0,
-    walkerRelationship: 0,
-    walkerBehavioralState: 'steady',
-    recentEvents: state.narrativeLog.slice(-5).map(e => e.text),
-  };
-}
-
 /**
  * Check if we should trigger an ambient LLM overhear.
  * Called from the game loop. Fires at most once per mile gap.
@@ -125,6 +82,9 @@ export function checkAmbientOverhear(state: GameState): void {
 
   // Respect minimum gap from last overheard (scripted or ambient)
   if (state.world.milesWalked - state.lastOverheardMile < MIN_MILES_BETWEEN_OVERHEARDS) return;
+
+  // Don't trigger during active overlays
+  if (state.player.activeCrisis || state.llmDialogue || state.activeScene || state.activeApproach) return;
 
   // Check for arc-aware relationship stage first (before random chance)
   let arcWalkerA: number | null = null;

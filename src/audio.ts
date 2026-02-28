@@ -593,6 +593,90 @@ export function cancelSpeech() {
 }
 
 // ============================================================
+// CROWD NOISE — filtered white noise, density/mood-reactive
+// Band-pass filtered noise layer that represents ambient crowds
+// ============================================================
+
+let crowdNoiseSource: AudioBufferSourceNode | null = null;
+let crowdNoiseGain: GainNode | null = null;
+let crowdNoiseFilter: BiquadFilterNode | null = null;
+let currentCrowdDensity = 'none';
+
+export function startCrowdNoise() {
+  if (!ctx || !masterGain || crowdNoiseSource) return;
+
+  // Create looped white noise buffer
+  const bufferSize = ctx.sampleRate * 4;
+  const noiseBuf = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+  const data = noiseBuf.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) {
+    data[i] = Math.random() * 2 - 1;
+  }
+
+  crowdNoiseSource = ctx.createBufferSource();
+  crowdNoiseSource.buffer = noiseBuf;
+  crowdNoiseSource.loop = true;
+
+  crowdNoiseFilter = ctx.createBiquadFilter();
+  crowdNoiseFilter.type = 'bandpass';
+  crowdNoiseFilter.frequency.value = 800;
+  crowdNoiseFilter.Q.value = 1.5;
+
+  crowdNoiseGain = ctx.createGain();
+  crowdNoiseGain.gain.value = 0; // Start silent
+
+  crowdNoiseSource.connect(crowdNoiseFilter);
+  crowdNoiseFilter.connect(crowdNoiseGain);
+  crowdNoiseGain.connect(masterGain);
+  crowdNoiseSource.start();
+}
+
+export function updateCrowdNoise(density: string, mood: string) {
+  if (!ctx || !crowdNoiseGain || !crowdNoiseFilter) return;
+  currentCrowdDensity = density;
+
+  // Volume by density
+  let targetVol: number;
+  let bandwidth: number;
+  switch (density) {
+    case 'none':     targetVol = 0;     bandwidth = 0.5; break;
+    case 'sparse':   targetVol = 0.015; bandwidth = 1.0; break;
+    case 'moderate': targetVol = 0.035; bandwidth = 1.5; break;
+    case 'heavy':    targetVol = 0.06;  bandwidth = 2.0; break;
+    case 'massive':  targetVol = 0.09;  bandwidth = 3.0; break;
+    default:         targetVol = 0;     bandwidth = 0.5; break;
+  }
+
+  crowdNoiseGain.gain.setTargetAtTime(targetVol, ctx.currentTime, 1.0);
+  crowdNoiseFilter.Q.setTargetAtTime(bandwidth, ctx.currentTime, 1.0);
+
+  // Mood adjusts center frequency
+  let centerFreq: number;
+  switch (mood) {
+    case 'excited':
+    case 'cheering':  centerFreq = 1200; break; // Energetic, higher
+    case 'subdued':
+    case 'uneasy':    centerFreq = 400;  break; // Ominous, lower
+    case 'surreal':
+      // Slowly sweep the filter for unsettling effect
+      centerFreq = 600 + Math.sin(Date.now() * 0.001) * 300;
+      break;
+    default:          centerFreq = 800;  break;
+  }
+  crowdNoiseFilter.frequency.setTargetAtTime(centerFreq, ctx.currentTime, 2.0);
+}
+
+export function stopCrowdNoise() {
+  if (crowdNoiseSource) {
+    try { crowdNoiseSource.stop(); } catch { /* */ }
+    crowdNoiseSource = null;
+  }
+  crowdNoiseGain = null;
+  crowdNoiseFilter = null;
+  currentCrowdDensity = 'none';
+}
+
+// ============================================================
 // MUTE / VOLUME
 // ============================================================
 

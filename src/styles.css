@@ -1033,6 +1033,18 @@ html, body {
   margin-left: 0.3rem;
 }
 
+.prox-badge {
+  font-size: 0.5rem;
+  font-weight: 600;
+  margin-left: 0.3rem;
+  padding: 0 0.2rem;
+  border-radius: 2px;
+}
+.prox-whisper { color: #40ff60; border: 1px solid rgba(64, 255, 96, 0.4); }
+.prox-talk { color: rgba(64, 255, 96, 0.7); border: 1px solid rgba(64, 255, 96, 0.25); }
+.prox-shout { color: rgba(64, 255, 96, 0.4); border: 1px solid rgba(64, 255, 96, 0.15); }
+.prox-none { color: rgba(128, 128, 128, 0.5); border: 1px solid rgba(128, 128, 128, 0.2); }
+
 .action-btn.active {
   border-color: var(--accent-blue);
   color: var(--accent-blue);

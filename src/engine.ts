@@ -258,6 +258,7 @@ export function requestFood(state: GameState): boolean {
 
   p.stamina = Math.min(100, p.stamina + 5);
   p.hunger = Math.min(100, p.hunger + 20);
+  p.bowel = Math.min(100, p.bowel + 8 + Math.floor(Math.random() * 5)); // eating accelerates bowel
   p.foodCooldown = 30; // 30 game minutes
   addNarrative(state, 'You grab a food concentrate from the belt. You eat while walking, not tasting it.', 'system');
   return true;
@@ -269,6 +270,7 @@ export function requestWater(state: GameState): boolean {
 
   p.stamina = Math.min(100, p.stamina + 3);
   p.hydration = Math.min(100, p.hydration + 25);
+  p.bladder = Math.min(100, p.bladder + 10 + Math.floor(Math.random() * 6)); // drinking accelerates bladder
   p.waterCooldown = 15; // 15 game minutes
   addNarrative(state, 'You take a canteen from the belt. The water is lukewarm but it\'s everything.', 'system');
   return true;
@@ -458,6 +460,46 @@ export function issueWarning(state: GameState) {
   }
 }
 
+/**
+ * Apply all warning side effects WITHOUT adding narrative text.
+ * Used by hostile action / crisis code paths that produce their own custom warning messages.
+ */
+export function issueWarningRaw(state: GameState) {
+  const p = state.player;
+  console.log(`[Engine] WARNING (raw) issued! ${p.warnings + 1}/3 at mile ${state.world.milesWalked.toFixed(1)}`);
+  p.warnings++;
+  p.totalWarningsReceived++;
+  p.warningTimer = 0;
+  p.lastWarningTime = state.world.hoursElapsed;
+  p.slowAccum = 0;
+  p.morale = Math.max(0, p.morale - 10);
+  state.lastWarningMile = state.world.milesWalked;
+
+  if (p.warnings >= 3) {
+    p.alive = false;
+    if (p.stamina <= 5) p.causeOfDeath = 'Third warning. Your body had nothing left to give.';
+    else if (p.morale <= 5) p.causeOfDeath = 'Third warning. You stopped caring whether you lived or died.';
+    else if (p.pain >= 90) p.causeOfDeath = 'Third warning. The pain made it impossible to keep pace.';
+    else if (p.clarity <= 15) p.causeOfDeath = 'Third warning. You barely knew where you were anymore.';
+    else p.causeOfDeath = 'Third warning. The soldiers don\'t give a fourth.';
+    addNarrative(state,
+      `Walker #100 — ${p.name} — Eliminated — Mile ${state.world.milesWalked.toFixed(1)}`,
+      'elimination'
+    );
+    state.ticketQueue.push({
+      walkerNumber: 100,
+      name: p.name,
+      homeState: 'You',
+      motivation: p.causeOfDeath,
+      mile: state.world.milesWalked,
+      placement: 100 - state.eliminationCount,
+      tier: 1,
+      startTime: Date.now(),
+    });
+    state.playerDeathTime = Date.now();
+  }
+}
+
 // ============================================================
 // NPC SYSTEMS
 // ============================================================
@@ -556,9 +598,9 @@ const npcLastWarningHour = new Map<number, number>();
 // Track post-warning speed boost per NPC (remaining game-minutes of adrenaline)
 const npcWarningBoost = new Map<number, number>();
 
-const WARNING_ACCUM_THRESHOLD = 8;  // game-minutes below 4.0 to trigger warning
-const WARNING_COOLDOWN = 20;         // game-minutes minimum between warnings
-const WARNING_BOOST_DURATION = 8;    // game-minutes of fight-to-survive speed boost
+const WARNING_ACCUM_THRESHOLD = 14;  // game-minutes below 4.0 to trigger warning
+const WARNING_COOLDOWN = 20;          // game-minutes minimum between warnings
+const WARNING_BOOST_DURATION = 18;    // game-minutes of fight-to-survive speed boost
 // Track walkers awaiting elimination after 3rd warning (walkerNumber -> real timestamp)
 const pendingEliminations = new Map<number, number>();
 
@@ -566,12 +608,15 @@ function checkNPCWarnings(state: GameState, gameMinutes: number) {
   for (const w of state.walkers) {
     if (!w.alive) continue;
 
-    // --- Post-warning boost: walker fights to keep pace ---
+    // --- Post-warning boost: walker fights to keep pace (tapering) ---
     const boost = npcWarningBoost.get(w.walkerNumber) || 0;
     if (boost > 0) {
-      npcWarningBoost.set(w.walkerNumber, boost - gameMinutes);
-      // Override speed: adrenaline pushes them above 4.0 temporarily
-      w.speed = Math.max(w.speed, 4.1 + Math.random() * 0.3);
+      const remaining = Math.max(0, boost - gameMinutes);
+      npcWarningBoost.set(w.walkerNumber, remaining);
+      // Tapering boost: full speed at start, fading toward baseline as it expires
+      const boostFraction = remaining / WARNING_BOOST_DURATION;
+      const boostSpeed = 4.0 + (0.3 + Math.random() * 0.2) * boostFraction;
+      w.speed = Math.max(w.speed, boostSpeed);
       npcSlowAccum.set(w.walkerNumber, 0); // reset slow time during boost
       continue; // skip warning check while boosted
     }
@@ -601,7 +646,7 @@ function checkNPCWarnings(state: GameState, gameMinutes: number) {
         }
       }
 
-      // Three warnings: queue for delayed elimination (2s for dramatic timing)
+      // Three warnings: queue for delayed elimination (8s for warning voice + pleading audio)
       if (w.warnings >= 3 && !pendingEliminations.has(w.walkerNumber)) {
         pendingEliminations.set(w.walkerNumber, Date.now());
       }
@@ -630,7 +675,7 @@ export function processPendingEliminations(state: GameState): number[] {
   const eliminated: number[] = [];
   const now = Date.now();
   for (const [num, timestamp] of pendingEliminations) {
-    if (now - timestamp >= 2000) {
+    if (now - timestamp >= 8000) {
       pendingEliminations.delete(num);
       const w = getWalkerState(state, num);
       if (w && w.alive) {
@@ -672,28 +717,37 @@ function issueNPCWarning(state: GameState, w: WalkerState) {
       const reactor = reactors[Math.floor(Math.random() * reactors.length)];
       const reactorData = getWalkerData(state, reactor.walkerNumber);
       if (reactorData) {
-        const sympathetic = [
-          `That's ${data.name}... come on, pick it up...`,
-          `Oh no. Not ${data.name}.`,
-          `${data.name}, move your feet!`,
-        ];
-        const unsympathetic = [
-          `Not gonna shed a tear over that one.`,
-          `One less to worry about.`,
-          `Saw that coming a mile back.`,
-        ];
-        const neutral = [
-          `There goes another one...`,
-          `Keep walking. Don't look.`,
-          `How many is that now?`,
-        ];
+        const name = data.name;
+        const young = data.age != null && data.age < 18;
+        const num = w.walkerNumber;
         let reaction: string;
         if (w.relationship > 20 || reactor.relationship > 20) {
-          reaction = sympathetic[Math.floor(Math.random() * sympathetic.length)];
+          // Sympathetic — they cared about this walker
+          const options = [
+            `${name}... no. Not ${name}.`,
+            `Oh God, that was ${name}. ${young ? 'Just a kid.' : 'I thought he had more miles in him.'}`,
+            `${name}, move your feet! Come on!`,
+            `${name}... I'm sorry.`,
+          ];
+          reaction = options[Math.floor(Math.random() * options.length)];
         } else if (w.relationship < -20) {
-          reaction = unsympathetic[Math.floor(Math.random() * unsympathetic.length)];
+          // Unsympathetic — no love lost
+          const options = [
+            `${name} had it coming.`,
+            `One less between me and the Prize. Sorry, ${name}.`,
+            `Saw ${name} struggling for the last mile. Only a matter of time.`,
+            `That was number ${num}? Won't miss him.`,
+          ];
+          reaction = options[Math.floor(Math.random() * options.length)];
         } else {
-          reaction = neutral[Math.floor(Math.random() * neutral.length)];
+          // Neutral — still personalized with name
+          const options = [
+            `There goes ${name}. Keep walking.`,
+            `Was that ${name}? Number ${num}? Don't think about it.`,
+            `${name}. Gone. ${young ? 'Poor kid.' : 'How many is that now?'}`,
+            `${name}'s done. Don't look back.`,
+          ];
+          reaction = options[Math.floor(Math.random() * options.length)];
         }
         addSpeechBubble(state, reactorData.name, reaction, 'warning_reaction', 'right', 8000);
       }
@@ -722,8 +776,10 @@ function checkNPCEliminations(state: GameState) {
     // Past their elimination mile: start degrading speed to trigger natural warnings
     if (mile >= elimMile && w.warnings < 3) {
       const milesOverdue = mile - elimMile;
-      // Gradually slow them down — the further past, the worse
-      const slowFactor = Math.min(0.8, milesOverdue * 0.15);
+      // Gradually slow them down — per-walker variance so eliminations spread naturally
+      const walkerGrit = (Math.sin(w.walkerNumber * 3.7) + 1) * 0.5; // 0.0–1.0
+      const degradeRate = 0.08 + walkerGrit * 0.12; // 0.08–0.20 (was flat 0.15)
+      const slowFactor = Math.min(0.8, milesOverdue * degradeRate);
       w.speed = Math.max(2.0, w.speed - slowFactor);
       // Their decline makes them struggle visibly
       if (w.behavioralState !== 'breaking_down' && milesOverdue > 1) {
@@ -803,7 +859,7 @@ function eliminateWalker(state: GameState, w: WalkerState, data: import('./types
     };
     state.sceneBlockedUntil = Date.now() + 2000;
     setTimeout(() => {
-      if (!state.activeScene) {
+      if (!state.activeScene && !state.llmDialogue) {
         state.activeScene = scene;
         state.isPaused = true;
       }

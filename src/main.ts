@@ -8,17 +8,19 @@ import { gameTick, processPendingEliminations } from './engine';
 import { checkScriptedEvents, checkHallucinations, checkOverheards, checkEnding, checkAbsenceEffects } from './narrative';
 import { checkAmbientOverhear } from './overhear';
 import { checkApproach } from './approach';
-import { initUI, render, setEnding, closeWalkerPicker, handleSceneNext, handleSceneClose, closeLLMDialogue } from './ui';
+import { initUI, render, setEnding, closeWalkerPicker, closeDossier, handleSceneNext, handleSceneClose, closeLLMDialogue } from './ui';
 import { closeDialogue } from './dialogue';
 import { isServerAvailable } from './agentClient';
 import { resolveCrisis } from './crises';
 import { GameState } from './types';
 import { getWalkerData } from './state';
+import { getRouteSegment, getCrowdPhase } from './data/route';
 import {
   initAudio, ensureResumed, startAmbientDrone, stopAmbientDrone,
   updateDroneIntensity, calculateIntensity,
   playGunshot, playWarningBuzzer, playWarningVoice, isAudioInitialized,
   playPleading, cancelSpeech,
+  startCrowdNoise, updateCrowdNoise, stopCrowdNoise,
 } from './audio';
 
 // ============================================================
@@ -40,6 +42,7 @@ async function init() {
       initAudio();
       await ensureResumed(); // Resume context BEFORE creating audio nodes
       startAmbientDrone();
+      startCrowdNoise();
       droneStarted = true;
       console.log('[Main] Audio initialized on user gesture');
       document.removeEventListener('click', startAudio);
@@ -122,7 +125,7 @@ function gameLoop(timestamp: number) {
           if (match[1].includes('Final warning') && Math.random() < 0.3) {
             const numMatch = match[1].match(/warning,?\s*(\d+)/);
             const walkerAge = numMatch ? getWalkerData(state, Number(numMatch[1]))?.age : undefined;
-            setTimeout(() => playPleading(walkerAge), 1500);
+            setTimeout(() => playPleading(walkerAge), 3500);
           }
         } else {
           playWarningBuzzer();
@@ -149,6 +152,11 @@ function gameLoop(timestamp: number) {
         state.world.isNight,
       );
       updateDroneIntensity(intensity);
+
+      // Update crowd noise based on current route segment
+      const routeSeg = getRouteSegment(state.world.milesWalked);
+      const crowdPhase = getCrowdPhase(state.world.milesWalked);
+      updateCrowdNoise(routeSeg.crowdDensity, crowdPhase.mood);
     }
 
     // Check for ending conditions
@@ -169,6 +177,7 @@ function gameLoop(timestamp: number) {
   // Stop drone on game over
   if (state.screen === 'gameover' && droneStarted) {
     stopAmbientDrone();
+    stopCrowdNoise();
     droneStarted = false;
   }
 
@@ -252,6 +261,8 @@ document.addEventListener('keydown', (e) => {
         closeLLMDialogue(state);
       } else if (state.activeApproach) {
         state.activeApproach = null;
+      } else if (closeDossier()) {
+        // Dossier was open and closed
       } else if (state.activeDialogue) {
         closeDialogue(state);
       } else {

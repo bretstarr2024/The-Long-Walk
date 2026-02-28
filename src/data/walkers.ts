@@ -136,7 +136,7 @@ const TIER_1: WalkerData[] = [
       { arcPhase: 'introduction', mileRange: [0, 15], minConversations: 0, promptHint: 'All swagger. "I\'m gonna win this thing." Loud, boastful, dismissive. You genuinely believe your athleticism makes you invincible.' },
       { arcPhase: 'opening_up', mileRange: [15, 60], minConversations: 1, promptHint: 'Still confident but quieter. The first cracks: a twinge in your knee, tiredness you didn\'t expect. Mask it with bravado.' },
       { arcPhase: 'vulnerability', mileRange: [60, 95], minConversations: 2, promptHint: 'The knee is bad. You\'re limping. The bravado is forced now. If the player is kind, you might admit you\'re scared. If not, you lash out.' },
-      { arcPhase: 'crisis', mileRange: [95, 115], minConversations: 0, promptHint: 'Breaking down. Screaming, begging, denial. "I\'m FINE." You are not fine. The strong man reduced to a terrified boy.' },
+      { arcPhase: 'crisis', mileRange: [95, 105], minConversations: 0, promptHint: 'Breaking down. Screaming, begging, denial. "I\'m FINE." You are not fine. The strong man reduced to a terrified boy.' },
       { arcPhase: 'farewell', mileRange: [105, 115], minConversations: 0, promptHint: 'The bravado is gone. Just a scared boy. If the player is nearby, you might reach out one last time — not for help, but for someone to see you as you were before this.' },
     ],
     declineNarratives: [
@@ -207,7 +207,7 @@ const TIER_1: WalkerData[] = [
       { arcPhase: 'introduction', mileRange: [0, 20], minConversations: 0, promptHint: 'Needling, taunting, looking for a reaction. You provoke because it\'s the only way you know how to connect. "I\'ll dance on your grave."' },
       { arcPhase: 'opening_up', mileRange: [20, 120], minConversations: 1, promptHint: 'Ostracized. Everyone hates you and you pretend that\'s what you wanted. If the player talks to you, be suspicious — nobody talks to you willingly.' },
       { arcPhase: 'vulnerability', mileRange: [120, 230], minConversations: 2, promptHint: 'The mask slips. You\'re desperately lonely. You\'ve never been loved. If the player shows genuine kindness, you don\'t know how to handle it. Might lash out or go quiet.' },
-      { arcPhase: 'crisis', mileRange: [230, 250], minConversations: 0, promptHint: 'Unraveling. You promised to dance on their graves. And now you\'re going to. The madness is setting in. You laugh at things that aren\'t funny.' },
+      { arcPhase: 'crisis', mileRange: [230, 245], minConversations: 0, promptHint: 'Unraveling. You promised to dance on their graves. And now you\'re going to. The madness is setting in. You laugh at things that aren\'t funny.' },
       { arcPhase: 'farewell', mileRange: [245, 255], minConversations: 0, promptHint: 'The dance is coming. If the player was kind to you — the only one who ever was — there might be one last flicker of the real you underneath. "You didn\'t have to talk to me." Then the madness takes over.' },
     ],
     declineNarratives: [

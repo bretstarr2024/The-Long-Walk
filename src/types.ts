@@ -13,6 +13,7 @@ export type CrowdDensity = 'none' | 'sparse' | 'moderate' | 'heavy' | 'massive';
 export type CrowdMood = 'excited' | 'cheering' | 'subdued' | 'uneasy' | 'hostile' | 'surreal';
 export type BehavioralState = 'steady' | 'struggling' | 'talking' | 'breaking_down' | 'eliminated';
 export type AlliancePotential = 'none' | 'low' | 'medium' | 'high';
+export type ProximityZone = 'whisper' | 'talk' | 'shout' | 'none';
 export type RelationshipTier = 'enemy' | 'hostile' | 'wary' | 'neutral' | 'friendly' | 'close' | 'allied' | 'bonded';
 
 export type HostileActionType =
@@ -448,3 +449,15 @@ export interface CrowdPhase {
   mood: CrowdMood;
   description: string;
 }
+
+/** Canonical 3-letter stat abbreviations — single source of truth for all UI. */
+export const STAT_LABELS = {
+  stamina: 'STA',
+  hydration: 'HYD',
+  hunger: 'HUN',
+  pain: 'PAI',
+  morale: 'MOR',
+  clarity: 'CLR',
+  bladder: 'BDR',
+  bowel: 'BWL',
+} as const;

@@ -4,8 +4,9 @@
 // ============================================================
 
 import { GameState, ApproachType, WalkerState } from './types';
-import { getWalkerData, getWalkerState, getAliveWalkers, addNarrative } from './state';
-import { requestApproach, type WalkerProfile, type GameContextForAgent } from './agentClient';
+import { getWalkerData, getWalkerState, addNarrative } from './state';
+import { requestApproach } from './agentClient';
+import { buildGameContext, buildWalkerProfile } from './contextBuilder';
 
 // --- Config ---
 function getMinMileGap(act: number): number {
@@ -147,8 +148,8 @@ export function checkApproach(state: GameState): void {
       }
     }
 
-    // Introduction: mile < 20, never spoken, Tier 1/2
-    if (state.world.milesWalked < 20 && w.conversationCount === 0 && data.tier <= 2) {
+    // Introduction: mile < 30, never spoken, Tier 1/2
+    if (state.world.milesWalked < 30 && w.conversationCount === 0 && data.tier <= 2) {
       const introKey = `intro_${w.walkerNumber}`;
       if (!state.triggeredEvents.has(introKey)) {
         candidates.push({
@@ -232,71 +233,9 @@ export function checkApproach(state: GameState): void {
     startTime: Date.now(),
   };
 
-  // Build walker profile and game context for LLM
-  const w = getWalkerState(state, chosen.walkerNum)!;
-  const profile: WalkerProfile = {
-    name: data.name,
-    walkerNumber: data.walkerNumber,
-    age: data.age,
-    homeState: data.homeState,
-    tier: data.tier,
-    personalityTraits: data.personalityTraits,
-    dialogueStyle: data.dialogueStyle,
-    backstoryNotes: data.backstoryNotes,
-    psychologicalArchetype: data.psychologicalArchetype,
-    alliancePotential: data.alliancePotential,
-  };
-
-  const remaining = getAliveWalkers(state).length + 1;
-  const recentEvents = state.narrativeLog.slice(-5).map(e => e.text);
-
-  // Compute arc phase
-  let arcPhase: string | undefined;
-  let arcPromptHint: string | undefined;
-  if (data.arcStages) {
-    for (let i = data.arcStages.length - 1; i >= 0; i--) {
-      const stage = data.arcStages[i];
-      if (state.world.milesWalked >= stage.mileRange[0] && w.conversationCount >= stage.minConversations) {
-        arcPhase = stage.arcPhase;
-        arcPromptHint = stage.promptHint;
-        break;
-      }
-    }
-  }
-
-  const gameCtx: GameContextForAgent = {
-    milesWalked: state.world.milesWalked,
-    hoursElapsed: state.world.hoursElapsed,
-    currentTime: state.world.currentTime,
-    dayNumber: state.world.dayNumber,
-    isNight: state.world.isNight,
-    weather: state.world.weather,
-    terrain: state.world.terrain,
-    crowdDensity: state.world.crowdDensity,
-    crowdMood: state.world.crowdMood,
-    currentAct: state.world.currentAct,
-    horrorTier: state.world.horrorTier,
-    walkersRemaining: remaining,
-    playerName: state.player.name,
-    playerWarnings: state.player.warnings,
-    playerMorale: Math.round(state.player.morale),
-    playerStamina: Math.round(state.player.stamina),
-    walkerWarnings: w.warnings,
-    walkerMorale: Math.round(w.morale),
-    walkerStamina: Math.round(w.stamina),
-    walkerRelationship: w.relationship,
-    walkerBehavioralState: w.behavioralState,
-    recentEvents,
-    arcPhase,
-    arcPromptHint,
-    conversationCount: w.conversationCount,
-    revealedFacts: w.revealedFacts.length > 0 ? w.revealedFacts : undefined,
-    playerActions: w.playerActions.length > 0 ? w.playerActions : undefined,
-    isAllied: w.isAlliedWithPlayer || undefined,
-    isBonded: w.isBonded || undefined,
-    isEnemy: w.isEnemy || undefined,
-    allyStrain: w.isAlliedWithPlayer ? w.allyStrain : undefined,
-  };
+  // Build walker profile and game context for LLM (shared utilities with two-pass arc fallback)
+  const profile = buildWalkerProfile(state, chosen.walkerNum)!;
+  const gameCtx = buildGameContext(state, chosen.walkerNum);
 
   // Fire LLM request
   requestApproach(profile, gameCtx, chosen.type, chosen.context)
