@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.9.2 — 2026-02-28
+
+Seven playtest bugs fixed — visualization scrolling, audio, player warnings, and player death gunshot.
+
+### Visualization Fixes
+- **Scroll direction reversed**: Terrain, road center dashes, shoulder ticks, and crowd figures now scroll downward (opposite to walker movement). Previously scrolled upward (same direction as walkers), breaking the illusion of forward motion
+- **Mile markers scroll with progress**: Markers now smoothly scroll based on fractional mile position instead of snapping to fixed Y positions. Shows 7 markers (±3 miles from current) with continuous movement
+- **Center road dashes more visible**: Alpha increased from 0.12 to 0.25, line width from 0.8 to 1.0 — dashes are now clearly visible as the road scrolls past
+- **Grade inclinometer redesigned as vertical**: Replaced horizontal bar with a vertical inclinometer (12×66px). 0° at center, uphill at top, downhill at bottom. Bubble indicator moves along the vertical axis with degree label that follows. Labels: UP/DN at ends
+
+### Audio Fixes
+- **Crowd noise louder**: Volume levels ~3x increase across all densities (sparse 0.015→0.04, moderate 0.035→0.08, heavy 0.06→0.14, massive 0.09→0.20). Previously inaudible at start of game
+
+### Player Warning/Death Fixes
+- **Player warnings now announced**: Fixed bug where warnings from pee/poop actions were silent. Root cause: per-frame narrative snapshot missed entries added by UI click handlers between frames. Replaced with persistent `lastCheckedNarrativeIdx` counter that catches all entries regardless of when they were added
+- **Gunshot on player death**: Player now hears a gunshot 3.5s after their final warning (lets warning voice finish). Previously only NPC deaths had gunshots. Uses `playerGunshotFired` flag to fire exactly once, cancels any speech before firing
+
 ## 0.9.1 — 2026-02-28
 
 Green phosphor radar visualization overhaul + full 8-category audit remediation (3 criticals, 15 warnings across 12 files).

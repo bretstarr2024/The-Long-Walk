@@ -639,12 +639,12 @@ export function updateCrowdNoise(density: string, mood: string) {
   let targetVol: number;
   let bandwidth: number;
   switch (density) {
-    case 'none':     targetVol = 0;     bandwidth = 0.5; break;
-    case 'sparse':   targetVol = 0.015; bandwidth = 1.0; break;
-    case 'moderate': targetVol = 0.035; bandwidth = 1.5; break;
-    case 'heavy':    targetVol = 0.06;  bandwidth = 2.0; break;
-    case 'massive':  targetVol = 0.09;  bandwidth = 3.0; break;
-    default:         targetVol = 0;     bandwidth = 0.5; break;
+    case 'none':     targetVol = 0;    bandwidth = 0.5; break;
+    case 'sparse':   targetVol = 0.04; bandwidth = 1.0; break;
+    case 'moderate': targetVol = 0.08; bandwidth = 1.5; break;
+    case 'heavy':    targetVol = 0.14; bandwidth = 2.0; break;
+    case 'massive':  targetVol = 0.20; bandwidth = 3.0; break;
+    default:         targetVol = 0;    bandwidth = 0.5; break;
   }
 
   crowdNoiseGain.gain.setTargetAtTime(targetVol, ctx.currentTime, 1.0);

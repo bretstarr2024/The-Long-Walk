@@ -429,7 +429,7 @@ export function updateVisualization(state: GameState, canvas: HTMLCanvasElement)
   // Shoulder tick marks (scroll with road — perpendicular dashes)
   ctx.strokeStyle = `rgba(64, 255, 96, ${0.12 * nightDim})`;
   ctx.lineWidth = 0.6;
-  const tickStart = -(scrollOffset % TICK_PERIOD);
+  const tickStart = (scrollOffset % TICK_PERIOD) - TICK_PERIOD;
   for (let ty = tickStart; ty < H; ty += TICK_PERIOD) {
     // Left shoulder tick
     ctx.beginPath();
@@ -443,12 +443,12 @@ export function updateVisualization(state: GameState, canvas: HTMLCanvasElement)
     ctx.stroke();
   }
 
-  // Road center dashes (scroll with road)
-  ctx.strokeStyle = `rgba(64, 255, 96, ${0.12 * nightDim})`;
-  ctx.lineWidth = 0.8;
+  // Road center dashes (scroll with road — moves downward as walkers advance)
+  ctx.strokeStyle = `rgba(64, 255, 96, ${0.25 * nightDim})`;
+  ctx.lineWidth = 1;
   const dashLen = 6;
   const dashGap = 12;
-  const dashStart = -(scrollOffset % DASH_PERIOD);
+  const dashStart = (scrollOffset % DASH_PERIOD) - DASH_PERIOD;
   for (let dy = dashStart; dy < H; dy += DASH_PERIOD) {
     ctx.beginPath();
     ctx.moveTo(roadCenter, dy);
@@ -483,9 +483,9 @@ export function updateVisualization(state: GameState, canvas: HTMLCanvasElement)
       if (m < 0 || m > 400) continue;
       const mSeg = getRouteSegment(m);
       const objs = getCachedTerrain(m, mSeg.location);
-      // Y position: mile offset from current, scrolled
+      // Y position: miles ahead appear above center (top=front), miles behind below
       const mileDelta = m - currentMile;
-      const baseYForMile = H * 0.5 + mileDelta * pixPerMile;
+      const baseYForMile = H * 0.5 - mileDelta * pixPerMile;
 
       for (const obj of objs) {
         const objY = baseYForMile + obj.yFrac * pixPerMile;
@@ -514,7 +514,7 @@ export function updateVisualization(state: GameState, canvas: HTMLCanvasElement)
   const numCrowd = crowdCount(seg.crowdDensity);
   if (numCrowd > 0) {
     const crowdSpacing = H / numCrowd;
-    const crowdScrollStart = -(scrollOffset % crowdSpacing);
+    const crowdScrollStart = (scrollOffset % crowdSpacing) - crowdSpacing;
     for (let i = 0; i < numCrowd + 2; i++) {
       const baseIdx = i + Math.floor(scrollOffset / crowdSpacing);
       const jy = seededJitter(baseIdx + 700, 0) * 2;
@@ -967,13 +967,14 @@ export function updateVisualization(state: GameState, canvas: HTMLCanvasElement)
     ctx.stroke();
   }
 
-  // --- Grade inclinometer (below miles/time, left side) ---
+  // --- Grade inclinometer (vertical, below miles/time, left side) ---
   {
     const currentSeg = getRouteSegment(state.world.milesWalked);
     const gx = 4;
     const gy = 54;
-    const gw = 44;
-    const gh = 10;
+    const gw = 12;
+    const gh = 66;
+    const centerY = gy + gh / 2;
 
     // Bar background
     ctx.fillStyle = 'rgba(0, 20, 0, 0.5)';
@@ -982,53 +983,60 @@ export function updateVisualization(state: GameState, canvas: HTMLCanvasElement)
     ctx.lineWidth = 0.5;
     ctx.strokeRect(gx, gy, gw, gh);
 
-    // Center mark
-    ctx.fillStyle = `rgba(64, 255, 96, ${0.15 * nightDim})`;
-    ctx.fillRect(gx + gw / 2, gy, 0.5, gh);
+    // Center mark (0° line)
+    ctx.fillStyle = `rgba(64, 255, 96, ${0.2 * nightDim})`;
+    ctx.fillRect(gx, centerY, gw, 0.5);
 
-    // Bubble position based on terrain
-    let bubbleOffset: number; // -1 (left/downhill) to +1 (right/uphill)
+    // End labels
+    ctx.fillStyle = `rgba(64, 255, 96, ${0.35 * nightDim})`;
+    ctx.font = '7px "IBM Plex Mono", monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText('UP', gx + gw + 3, gy + 7);
+    ctx.fillText('DN', gx + gw + 3, gy + gh - 2);
+
+    // Bubble position based on terrain: -1 (top/uphill) to +1 (bottom/downhill)
+    let bubbleOffset: number;
     let gradeText: string;
     let gradeAlpha: number;
-    let jitter = 0;
+    let jitterX = 0;
 
     switch (currentSeg.terrain) {
       case 'uphill':
-        bubbleOffset = 0.5;
-        gradeText = '+6% \u25B2';
+        bubbleOffset = -0.55;
+        gradeText = '+6°';
         gradeAlpha = 0.8;
         break;
       case 'downhill':
-        bubbleOffset = -0.4;
-        gradeText = '-3% \u25BC';
+        bubbleOffset = 0.45;
+        gradeText = '-3°';
         gradeAlpha = 0.6;
         break;
       case 'rough':
         bubbleOffset = seededJitter(frameCounter, frameCounter * 0.3) * 0.3;
-        jitter = seededJitter(frameCounter + 50, frameCounter * 0.2) * 1;
-        gradeText = 'ROUGH';
+        jitterX = seededJitter(frameCounter + 50, frameCounter * 0.2) * 1;
+        gradeText = '~0°';
         gradeAlpha = 0.7;
         break;
       default:
         bubbleOffset = 0;
-        gradeText = 'FLAT';
+        gradeText = '0°';
         gradeAlpha = 0.4;
         break;
     }
 
-    // Draw bubble (filled circle)
-    const bubbleX = gx + gw / 2 + bubbleOffset * (gw / 2 - 4);
-    const bubbleY = gy + gh / 2 + jitter;
+    // Draw bubble (filled circle on vertical axis)
+    const bubbleX = gx + gw / 2 + jitterX;
+    const bubbleY = centerY + bubbleOffset * (gh / 2 - 4);
     ctx.fillStyle = `rgba(64, 255, 96, ${0.7 * nightDim})`;
     ctx.beginPath();
     ctx.arc(bubbleX, bubbleY, 3, 0, Math.PI * 2);
     ctx.fill();
 
-    // Grade label to the right of bar
+    // Degree label next to bubble
     ctx.fillStyle = `rgba(64, 255, 96, ${gradeAlpha * nightDim})`;
     ctx.font = 'bold 8px "IBM Plex Mono", monospace';
     ctx.textAlign = 'left';
-    ctx.fillText(gradeText, gx + gw + 4, gy + gh - 1);
+    ctx.fillText(gradeText, gx + gw + 3, bubbleY + 3);
   }
 
   // --- HUD TEXT (green monospace) ---
@@ -1049,23 +1057,25 @@ export function updateVisualization(state: GameState, canvas: HTMLCanvasElement)
   ctx.fillText('MIDDLE', W - 4, H * 0.49);
   ctx.fillText('BACK', W - 4, H * 0.76);
 
-  // Mile markers (right edge)
+  // Mile markers (right edge — scroll with progress)
   {
     const currentMile = state.world.milesWalked;
     const markerX = roadRight + 6;
-    const markerPositions = [
-      { mile: Math.floor(currentMile) - 1, yFrac: 0.7 },
-      { mile: Math.floor(currentMile),     yFrac: 0.5 },
-      { mile: Math.floor(currentMile) + 1, yFrac: 0.3 },
-    ];
+    const baseMile = Math.floor(currentMile);
+    const frac = currentMile - baseMile;
+    const mileSpacing = 0.2; // 20% of screen height per mile
     ctx.font = '9px "IBM Plex Mono", monospace';
     ctx.textAlign = 'left';
-    for (const mp of markerPositions) {
-      if (mp.mile < 0 || mp.mile > 400) continue;
-      const my2 = H * mp.yFrac;
+    for (let offset = -3; offset <= 3; offset++) {
+      const m = baseMile + offset;
+      if (m < 0 || m > 400) continue;
+      // Miles ahead (positive offset) appear above center (top=front)
+      const yFrac = 0.5 + (frac - offset) * mileSpacing;
+      if (yFrac < 0.05 || yFrac > 0.95) continue;
+      const my2 = H * yFrac;
       ctx.fillStyle = PHOSPHOR_DIM;
       ctx.fillRect(markerX, my2 - 0.5, 4, 1);
-      ctx.fillText(`mi${mp.mile}`, markerX + 6, my2 + 3);
+      ctx.fillText(`mi${m}`, markerX + 6, my2 + 3);
     }
   }
 

@@ -71,6 +71,8 @@ async function init() {
 let lastRenderTime = 0;
 const RENDER_INTERVAL = 200; // Render game screen ~5 FPS (sub-panels rebuild)
 let droneStarted = false;
+let lastCheckedNarrativeIdx = 0; // Persistent — catches entries added between frames (e.g. pee/poop warnings)
+let playerGunshotFired = false;
 
 function gameLoop(timestamp: number) {
   const deltaMs = timestamp - state.lastTickTime;
@@ -89,9 +91,6 @@ function gameLoop(timestamp: number) {
     if (state.player.activeCrisis && state.gameSpeed > 1) {
       state.gameSpeed = 1;
     }
-
-    // Snapshot narrative count before tick to detect new events
-    const prevNarrativeCount = state.narrativeLog.length;
 
     // Run game systems every frame for smooth simulation
     gameTick(state, cappedDelta);
@@ -114,8 +113,8 @@ function gameLoop(timestamp: number) {
     // Check NPC approaches (they come to you)
     checkApproach(state);
 
-    // Trigger warning sounds for new narrative entries
-    for (let i = prevNarrativeCount; i < state.narrativeLog.length; i++) {
+    // Trigger warning sounds for new narrative entries (persistent index catches inter-frame entries)
+    for (let i = lastCheckedNarrativeIdx; i < state.narrativeLog.length; i++) {
       const entry = state.narrativeLog[i];
       if (entry.type === 'warning') {
         const match = entry.text.match(/"([^"]+)"/);
@@ -132,6 +131,8 @@ function gameLoop(timestamp: number) {
         }
       }
     }
+
+    lastCheckedNarrativeIdx = state.narrativeLog.length;
 
     // Process delayed eliminations (2s after 3rd warning)
     // Gunshot fires at moment of elimination, cutting off any pleading
@@ -169,6 +170,14 @@ function gameLoop(timestamp: number) {
 
   // Delayed gameover transition: show player death ticket first
   if (state.playerDeathTime > 0 && state.screen === 'game') {
+    // Fire gunshot once, ~3.5s after death (lets warning voice finish)
+    if (!playerGunshotFired) {
+      playerGunshotFired = true;
+      setTimeout(() => {
+        cancelSpeech();
+        playGunshot();
+      }, 3500);
+    }
     if (Date.now() - state.playerDeathTime > 6200) {
       state.screen = 'gameover';
     }
