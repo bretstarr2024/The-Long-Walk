@@ -1,0 +1,65 @@
+session_id: "2026-02-28-deferred-features-v090"
+date: "2026-02-28"
+branch: "main"
+version: "0.9.0"
+prior_session: "2026-02-27-playtest-fixes-v085"
+
+build_verification:
+  client_typescript: "pass"
+  server_typescript: "pass"
+  vite_build: "pass"
+
+commits:
+  - hash: "5e14656"
+    message: "feat(client): Ticket stacking, observe cooldown, warning reaction fix, stats fix (v0.8.5)"
+  - hash: "9103ab9"
+    message: "docs(sessions): Add session ledger and handoff for v0.8.5"
+  - hash: "95f71c3"
+    message: "feat(client): Sweet spot indicator, varied pleading voice, player death ticket (v0.9.0)"
+
+artifacts_updated:
+  - path: "src/styles.css"
+    change: "Ticket container flexbox stacking (v0.8.5). Effort meter ::after pseudo-element for sweet spot indicator at 58-68% (v0.9.0)."
+  - path: "src/ui.ts"
+    change: "Ticket queue stacking rewrite, observe 3-mile cooldown, observe button disabled state (v0.8.5)."
+  - path: "src/engine.ts"
+    change: "Warning reaction bubbles gated to 3rd warning (v0.8.5). Ticket push to queue (v0.8.5). Player death ticket + playerDeathTime instead of immediate gameover (v0.9.0)."
+  - path: "src/audio.ts"
+    change: "playPleading(age?) — pitch/rate vary by walker age (v0.9.0)."
+  - path: "src/main.ts"
+    change: "Parse walker number from warning text, pass age to playPleading (v0.9.0). Delayed gameover transition after playerDeathTime (v0.9.0). Import getWalkerData."
+  - path: "src/types.ts"
+    change: "activeTicket → ticketQueue (v0.8.5). lastObserveMile on PlayerState (v0.8.5). playerDeathTime on GameState (v0.9.0)."
+  - path: "src/state.ts"
+    change: "Default ticketQueue, lastObserveMile, playerDeathTime."
+  - path: "src/narrative.ts"
+    change: "Game over warnings stat: player.warnings (v0.8.5), then reverted to totalWarningsReceived (v0.9.0)."
+  - path: "docs/CHANGELOG.md"
+    change: "v0.8.5 and v0.9.0 entries."
+
+decisions_made:
+  - decision: "Sweet spot indicator is CSS-only (::after pseudo-element)"
+    rationale: "No JS needed — the 58-68% range is fixed, a green tinted zone is the simplest visual hint"
+  - decision: "Vary pleading voice by age only, not personality"
+    rationale: "Pleading is 1.5s before gunshot cuts it — personality-based text selection is over-engineering for such a brief clip"
+  - decision: "Player death delays gameover by 6.2s for ticket display"
+    rationale: "Reuses existing ticket queue system, gives player a dramatic moment to absorb their death"
+  - decision: "Game over warnings stat shows totalWarningsReceived (lifetime)"
+    rationale: "User explicitly requested lifetime count — walked-off warnings are part of the story"
+
+open_questions:
+  - "Is 6.2s delay before gameover screen the right duration, or should it be shorter?"
+
+known_risks:
+  - "Tier 3 NPC warnings may flood narrative log during mass elimination phases"
+  - "Clarity drain at hour 6 may be too aggressive for new players"
+  - "npm run validate still fails on Node.js 25 (import.meta.env issue) — pre-existing, not blocking"
+  - "Web Speech API voice availability varies by platform — age-based pitch may sound different across browsers"
+
+explicitly_deferred:
+  - "No remaining deferred features — all 3 (sweet spot, pleading voice, player death ticket) are now implemented"
+
+next_actions:
+  - "Playtest v0.9.0 on production — verify sweet spot indicator visible, varied pleading voices, player death ticket displays before gameover"
+  - "Monitor narrative log density during late-game mass eliminations"
+  - "Consider visualization roadmap (docs/ROADMAP_visualization.md)"
