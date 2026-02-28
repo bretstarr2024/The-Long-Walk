@@ -1,0 +1,72 @@
+session_id: "2026-02-28-viz-overhaul-audit-v091"
+date: "2026-02-28"
+branch: "main"
+version: "0.9.1"
+prior_session: "2026-02-28-deferred-features-v090"
+
+build_verification:
+  client_typescript: "pass"
+  server_typescript: "pass"
+  vite_build: "pass"
+
+commits:
+  - hash: "705a232"
+    message: "feat(client,server): Green phosphor radar viz + full audit remediation (v0.9.1)"
+
+artifacts_updated:
+  - path: "src/visualization.ts"
+    change: "Complete rewrite — CRT green phosphor radar aesthetic replacing thermal satellite view"
+  - path: "src/audio.ts"
+    change: "Added GeigerController class for proximity-based Geiger counter audio"
+  - path: "src/styles.css"
+    change: "Added CRT scanline overlay and vignette CSS effects for visualization"
+  - path: "src/types.ts"
+    change: "Added GeigerController type, visualization config types"
+  - path: "src/contextBuilder.ts"
+    change: "NEW — shared buildGameContext() and buildWalkerProfile() extracted from 3 consumer files"
+  - path: "src/engine.ts"
+    change: "Added issueWarningRaw(), fixed setTimeout guard, fixed stale comment"
+  - path: "src/ui.ts"
+    change: "Removed duplicated context builders, added closeDossier(), fixed warning bypass in trip/steal"
+  - path: "src/approach.ts"
+    change: "Uses shared contextBuilder, extended intro window to mile 30"
+  - path: "src/overhear.ts"
+    change: "Uses shared contextBuilder, added overlay guards"
+  - path: "src/crises.ts"
+    change: "Fixed warning bypass in retaliate, fixed alliance relationship floor"
+  - path: "src/main.ts"
+    change: "Added closeDossier to Escape handler"
+  - path: "src/data/walkers.ts"
+    change: "Fixed Olson/Barkovitch arc stage mileRange overlaps"
+  - path: "server/index.ts"
+    change: "Zod schemas, global error handler, CSP/HSTS headers, 60s timeout, approach type whitelist"
+  - path: "server/tools.ts"
+    change: "TODO comment on write-only conversationFlags"
+  - path: "docs/CHANGELOG.md"
+    change: "Added v0.9.1 entry covering visualization overhaul and audit remediation"
+
+decisions_made:
+  - decision: "Green phosphor CRT radar aesthetic for visualization"
+    rationale: "Matches the dystopian surveillance theme of The Long Walk better than thermal satellite"
+  - decision: "issueWarningRaw() as separate function rather than a parameter on issueWarning()"
+    rationale: "Cleaner separation — raw variant does all side effects except narrative, for paths that already add custom narrative text"
+  - decision: "Optional walkerNum parameter on shared buildGameContext()"
+    rationale: "Zeroes walker stats when omitted (overhear narrator mode) without needing two separate functions"
+  - decision: "Zod validation uses parse() in try/catch returning 400, not leaked schema details"
+    rationale: "Security — don't reveal internal schema structure to potential attackers"
+
+open_questions:
+  - "conversationFlags are write-only (server set_flag tool writes, client never reads) — decide whether to wire up or remove"
+
+known_risks:
+  - "CSP header may be too restrictive if new external resources are added — test any new font/image/script sources"
+  - "60s Promise.race timeout creates orphaned OpenAI run if timeout fires — the run continues consuming API credits in background"
+
+explicitly_deferred:
+  - "conversationFlags read path — flagged with TODO, keep for future use"
+
+next_actions:
+  - "Playtest the green phosphor radar visualization in production"
+  - "Verify Geiger counter audio doesn't conflict with existing ambient music"
+  - "Consider wiring up conversationFlags to influence NPC behavior"
+  - "Consider adding more NPC relationship arc stages for mid-game content"
