@@ -333,6 +333,46 @@ const CRISIS_DEFS: CrisisDefinition[] = [
     },
   },
 
+  // 7b. BOWEL EMERGENCY
+  {
+    type: 'bowel_emergency',
+    canTrigger: (s) => s.player.bowel >= 100,
+    chance: () => 1.0,
+    build: (s) => {
+      const allyNum = getAllyNearby(s);
+      const allyName = allyNum ? getAllyName(s, allyNum) : '';
+      const options: CrisisOption[] = [
+        {
+          id: 'hold', label: 'Hold it', description: '+5 pain, stamina drain x1.3 for 10 min',
+          effects: { pain: 5, staminaDrainMult: 1.3, staminaDrainDuration: 10 }, requiresAlly: false,
+          narrative: 'You clench everything. Your guts cramp. The road is merciless.',
+        },
+        {
+          id: 'go', label: 'Go while walking', description: 'Bowel resets, -15 morale, 2 warnings',
+          effects: { morale: -15, bowelReset: true, warningRisk: 1.0 }, requiresAlly: false,
+          narrative: 'It happens. The soldiers see. Two warnings crack out. You keep walking.',
+        },
+        {
+          id: 'request', label: 'Request a stop', description: '...',
+          effects: { morale: -3 }, requiresAlly: false,
+          narrative: 'There are no stops. There are no breaks. There is only the Walk.',
+        },
+        {
+          id: 'ally_help', label: `${allyName} covers for you`, description: 'Bowel resets, 1 warning',
+          effects: { bowelReset: true, warningRisk: 1.0, allyStamina: -3, allyStrain: 5 }, requiresAlly: true,
+          narrative: `${allyName} moves to block the soldiers' view. One warning. Better than two.`,
+        },
+      ];
+      return {
+        type: 'bowel_emergency', title: 'BOWEL EMERGENCY',
+        description: 'Your stomach is in knots. You can\'t hold it much longer. The soldiers are watching.',
+        options, timeLimit: 25, timeRemaining: 25, speedOverride: 3.0,
+        defaultEffects: { morale: -20, bowelReset: true, warningRisk: 1.0 },
+        defaultNarrative: 'You can\'t hold it anymore. The soldiers see everything. The warnings ring out. You keep walking.',
+      };
+    },
+  },
+
   // 8. HYPOTHERMIA
   {
     type: 'hypothermia',
@@ -777,7 +817,7 @@ export function updateBladder(state: GameState, gameMinutes: number) {
 
 export function updateBowel(state: GameState, gameMinutes: number) {
   const p = state.player;
-  if (p.activeCrisis?.type === 'bathroom_emergency') return;
+  if (p.activeCrisis?.type === 'bathroom_emergency' || p.activeCrisis?.type === 'bowel_emergency') return;
 
   let fillRate = 0.6; // base: 60% of bladder rate
   if (p.hunger > 80) fillRate = 1.2;
@@ -904,9 +944,16 @@ export function resolveCrisis(state: GameState, optionId: string) {
   if (crisis.type === 'panic_attack' && optionId === 'rage') {
     state.player.tempEffects.push({ type: 'morale_delayed', value: -5, remaining: 30 });
   }
-  // Special: bathroom hold doesn't reset bladder
+  // Special: bathroom hold doesn't reset bladder/bowel
   if (crisis.type === 'bathroom_emergency' && optionId === 'hold') {
     // bladder stays at 100, will re-trigger in a few miles
+  }
+  if (crisis.type === 'bowel_emergency' && optionId === 'hold') {
+    // bowel stays at 100, will re-trigger in a few miles
+  }
+  // Special: bowel "go" costs 2 warnings (warningRisk issues 1, add second here)
+  if (crisis.type === 'bowel_emergency' && optionId === 'go' && state.player.alive) {
+    issueWarning(state);
   }
   // Special: bonded grief — honor has delayed morale recovery (via temp effect)
   if (crisis.type === 'bonded_grief' && optionId === 'honor') {
@@ -970,6 +1017,10 @@ function timeoutCrisis(state: GameState) {
 
   applyEffects(state, crisis.defaultEffects, crisis.targetWalker);
   if (crisis.defaultNarrative) addNarrative(state, crisis.defaultNarrative, 'warning');
+  // Bowel emergency timeout costs 2 warnings (applyEffects issues 1 via warningRisk, add second here)
+  if (crisis.type === 'bowel_emergency' && state.player.alive) {
+    issueWarning(state);
+  }
   state.player.activeCrisis = null;
   state.lastCrisisResolveMile = state.world.milesWalked;
 }
@@ -1010,6 +1061,11 @@ function applyEffects(state: GameState, effects: CrisisEffects, targetWalker?: n
   // Bladder reset
   if (effects.bladderReset) {
     p.bladder = 0;
+  }
+
+  // Bowel reset
+  if (effects.bowelReset) {
+    p.bowel = 0;
   }
 
   // Ally effects

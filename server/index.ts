@@ -298,6 +298,9 @@ app.post('/api/chat/:walkerId', async (c) => {
     return c.json({ error: 'Message too long (max 1000 characters)' }, 400);
   }
 
+  // Strip prompt delimiter markers from player message to prevent injection
+  const sanitizedMessage = message.replace(/\[GAME STATE\]/gi, '').replace(/\[PLAYER SAYS\]/gi, '');
+
   // Structured validation
   try {
     WalkerProfileSchema.parse(walker);
@@ -326,12 +329,12 @@ app.post('/api/chat/:walkerId', async (c) => {
     {
       type: 'message' as const,
       role: 'user' as const,
-      content: [{ type: 'input_text' as const, text: `[GAME STATE]\n${contextBlock}\n\n[PLAYER SAYS]\n${message}` }],
+      content: [{ type: 'input_text' as const, text: `[GAME STATE]\n${contextBlock}\n\n[PLAYER SAYS]\n${sanitizedMessage}` }],
     },
   ];
 
   // Record player message in history (will be rolled back on error)
-  addToHistory(walkerId, 'user', message);
+  addToHistory(walkerId, 'user', sanitizedMessage);
 
   // Stream response via SSE
   return createSSEResponse(agent, inputItems, {

@@ -12,7 +12,7 @@ let isMuted = false;
 // Music system references
 let chordInterval: ReturnType<typeof setInterval> | null = null;
 let pulseInterval: ReturnType<typeof setInterval> | null = null;
-let activeVoices: { osc: OscillatorNode; gain: GainNode }[] = [];
+let activeVoices: { osc: OscillatorNode; gain: GainNode; lpf?: BiquadFilterNode }[] = [];
 let noiseSource: AudioBufferSourceNode | null = null;
 let noiseGain: GainNode | null = null;
 let noiseFilter: BiquadFilterNode | null = null;
@@ -112,11 +112,15 @@ export function startAmbientDrone() {
 function playChord(freqs: number[]) {
   if (!ctx || !musicGain) return;
 
-  // Fade out existing voices
+  // Fade out existing voices and disconnect all nodes
   for (const v of activeVoices) {
     v.gain.gain.setTargetAtTime(0, ctx.currentTime, 0.5);
-    const osc = v.osc;
-    setTimeout(() => { try { osc.stop(); } catch { /* */ } }, 3000);
+    const { osc, gain, lpf } = v;
+    setTimeout(() => {
+      try { osc.stop(); } catch { /* */ }
+      gain.disconnect();
+      if (lpf) lpf.disconnect();
+    }, 3000);
   }
   activeVoices = [];
 
@@ -148,7 +152,7 @@ function playChord(freqs: number[]) {
     gain.connect(musicGain);
     osc.start();
 
-    activeVoices.push({ osc, gain });
+    activeVoices.push({ osc, gain, lpf });
   }
 
   // Add a sub-bass note (octave below root)
@@ -167,12 +171,16 @@ function playChord(freqs: number[]) {
 function crossfadeToChord(freqs: number[]) {
   if (!ctx || !musicGain) return;
 
-  // Smooth crossfade: fade out old voices over 2 seconds
+  // Smooth crossfade: fade out old voices over 2 seconds and disconnect all nodes
   const oldVoices = [...activeVoices];
   for (const v of oldVoices) {
     v.gain.gain.setTargetAtTime(0, ctx.currentTime, 0.8);
-    const osc = v.osc;
-    setTimeout(() => { try { osc.stop(); } catch { /* */ } }, 4000);
+    const { osc, gain, lpf } = v;
+    setTimeout(() => {
+      try { osc.stop(); } catch { /* */ }
+      gain.disconnect();
+      if (lpf) lpf.disconnect();
+    }, 4000);
   }
   activeVoices = [];
 
@@ -198,7 +206,7 @@ function crossfadeToChord(freqs: number[]) {
     lpf.connect(gain);
     gain.connect(musicGain);
     osc.start();
-    activeVoices.push({ osc, gain });
+    activeVoices.push({ osc, gain, lpf });
   }
 
   // Sub bass

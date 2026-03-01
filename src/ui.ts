@@ -504,12 +504,20 @@ function handleProposeAlliance(state: GameState) {
     ]));
   } else {
     // Accepted
-    formAlliance(state, w.walkerNumber);
-    pushChatReaction(state, `[Proposed alliance with ${name}]`, pick([
-      `${name} extends a hand. You shake it. "Together, then."`,
-      `"Yeah. Alright. Let's do this." ${name} falls in beside you.`,
-      `${name} nods slowly. "Watch my back. I'll watch yours."`,
-    ]));
+    const formed = formAlliance(state, w.walkerNumber);
+    if (formed) {
+      pushChatReaction(state, `[Proposed alliance with ${name}]`, pick([
+        `${name} extends a hand. You shake it. "Together, then."`,
+        `"Yeah. Alright. Let's do this." ${name} falls in beside you.`,
+        `${name} nods slowly. "Watch my back. I'll watch yours."`,
+      ]));
+    } else {
+      addNarrative(state, `You propose an alliance to ${name}. They hesitate. "Maybe later." It wasn't a no, but it wasn't a yes.`, 'narration');
+      pushChatReaction(state, `[Proposed alliance with ${name}]`, pick([
+        `${name} hesitates. "Maybe later." Not a no. Not a yes.`,
+        `"I need to think about it." ${name} won't meet your eyes.`,
+      ]));
+    }
   }
   cachedSocialActionsHtml = '';
 }
@@ -1370,7 +1378,7 @@ function updateWalkersPanel(state: GameState) {
     return `
       <div class="walker-item" data-walker="${w.walkerNumber}">
         <div>
-          <span class="walker-name">${data.name}</span>
+          <span class="walker-name">${escapeHtml(data.name)}</span>
           <span class="walker-number">#${w.walkerNumber}</span>
           ${warnings}
         </div>
@@ -1414,10 +1422,10 @@ function renderDossier(state: GameState, walkerNum: number): string {
   return `
     <div class="dossier-panel">
       <div class="dossier-header">
-        <div class="dossier-name">${data.name.toUpperCase()}</div>
+        <div class="dossier-name">${escapeHtml(data.name.toUpperCase())}</div>
         <div class="dossier-num">#${data.walkerNumber}</div>
       </div>
-      <div class="dossier-meta">${data.age} | ${data.homeState} | ${data.psychologicalArchetype}</div>
+      <div class="dossier-meta">${data.age} | ${escapeHtml(data.homeState)} | ${escapeHtml(data.psychologicalArchetype)}</div>
       <div class="dossier-stats">
         <div>Relationship: <span class="walker-disposition ${relLabel.toLowerCase()}">${relLabel}</span> (${w.relationship})</div>
         <div>Talks: ${w.conversationCount} | Alliance: ${w.isAlliedWithPlayer ? 'Yes' : 'No'}</div>
@@ -1430,7 +1438,7 @@ function renderDossier(state: GameState, walkerNum: number): string {
         const partnerNum = cm.walkerA === walkerNum ? cm.walkerB : cm.walkerA;
         const partnerData = getWalkerData(state, partnerNum);
         const stageLabel = cm.stage === 'spark' ? 'Spark' : cm.stage === 'crush' ? 'Crush' : 'In Love';
-        return `<div class="dossier-section"><div class="dossier-label">MATCHED WITH</div><div class="dossier-fact">${partnerData?.name || 'Walker #' + partnerNum} (${stageLabel})</div></div>`;
+        return `<div class="dossier-section"><div class="dossier-label">MATCHED WITH</div><div class="dossier-fact">${escapeHtml(partnerData?.name || 'Walker #' + partnerNum)} (${stageLabel})</div></div>`;
       })()}
       <div class="dossier-actions">
         ${canTalk ? `<button class="action-btn dossier-talk-btn" data-action="dossier-talk"><span class="si si-talk">${ICON.talk}</span>Talk</button>` : ''}
@@ -1481,7 +1489,7 @@ function updateActionsPanel(state: GameState) {
         : '<span class="prox-badge prox-none">OUT OF RANGE</span>';
       return `
         <button class="picker-item" data-pick-walker="${w.walkerNumber}">
-          <span class="picker-name">${d.name} <span class="picker-num">#${w.walkerNumber}</span>${allyBadge} ${proxLabel}</span>
+          <span class="picker-name">${escapeHtml(d.name)} <span class="picker-num">#${w.walkerNumber}</span>${allyBadge} ${proxLabel}</span>
           <span class="picker-info"><span class="picker-tier ${tierClass}">${tierLabel}</span> <span class="walker-disposition ${rel}">${rel}</span></span>
         </button>`;
     }).join('');
@@ -1506,7 +1514,7 @@ function updateActionsPanel(state: GameState) {
       const shareFoodDisabled = p.foodCooldown > 0;
       const shareWaterDisabled = p.waterCooldown > 0;
       shareHtml = `
-        <div class="share-divider">SHARE WITH ${allyName.toUpperCase()}</div>
+        <div class="share-divider">SHARE WITH ${escapeHtml(allyName.toUpperCase())}</div>
         <button class="action-btn share-btn" data-action="share-food" ${shareFoodDisabled ? 'disabled' : ''}>
           Share Food ${shareFoodDisabled ? `(${Math.ceil(p.foodCooldown)}m)` : ''}
         </button>
@@ -1558,7 +1566,7 @@ function updateActionsPanel(state: GameState) {
       const tierClass = 'tier-major';
       return `
         <button class="picker-item" data-pick-walker="${w.walkerNumber}">
-          <span class="picker-name">${d.name} <span class="picker-num">#${w.walkerNumber}</span></span>
+          <span class="picker-name">${escapeHtml(d.name)} <span class="picker-num">#${w.walkerNumber}</span></span>
           <span class="picker-info"><span class="picker-tier ${tierClass}">${tierLabel}</span> <span class="walker-disposition ${rel}">${rel}</span></span>
         </button>`;
     }).join('');
@@ -1580,11 +1588,11 @@ function updateActionsPanel(state: GameState) {
       <span class="si si-water">${ICON.water}</span>Water ${waterDisabled ? `(${Math.ceil(p.waterCooldown)}m)` : ''}
     </button>
     ${shareHtml}
-    <button class="action-btn" data-action="pee" ${inCrisis || p.bladder < 20 ? 'disabled' : ''}>
-      <span class="si si-pee">${ICON.pee}</span>Pee ${p.bladder >= 20 ? `(1 warning)` : ''}
+    <button class="action-btn" data-action="pee" ${inCrisis || p.bladder < 20 || p.warnings >= 2 ? 'disabled' : ''}>
+      <span class="si si-pee">${ICON.pee}</span>Pee ${p.warnings >= 2 ? '(too risky)' : p.bladder >= 20 ? '(1 warning)' : ''}
     </button>
-    <button class="action-btn" data-action="poop" ${inCrisis || p.bowel < 20 ? 'disabled' : ''}>
-      <span class="si si-poop">${ICON.poop}</span>Poop ${p.bowel >= 20 ? `(2 warnings)` : ''}
+    <button class="action-btn" data-action="poop" ${inCrisis || p.bowel < 20 || p.warnings >= 1 ? 'disabled' : ''}>
+      <span class="si si-poop">${ICON.poop}</span>Poop ${p.warnings >= 1 ? '(too risky)' : p.bowel >= 20 ? '(2 warnings)' : ''}
     </button>
     <button class="action-btn" data-action="stretch" ${stretchDisabled ? 'disabled' : ''}><span class="si si-stretch">${ICON.stretch}</span>Stretch${stretchCd}</button>
     <button class="action-btn" data-action="observe" ${observeDisabled ? 'disabled' : ''}><span class="si si-observe">${ICON.observe}</span>Look Around${observeCd}</button>
@@ -1805,7 +1813,7 @@ function updateApproachBanner(state: GameState) {
   // First render: create full banner DOM
   const html = `
     <div class="approach-banner">
-      <div class="approach-intro">${approach.walkerName} falls into step beside you.</div>
+      <div class="approach-intro">${escapeHtml(approach.walkerName)} falls into step beside you.</div>
       <div class="approach-text">"${escapeHtml(displayText)}"</div>
       <div class="approach-actions">
         <button class="approach-btn approach-reply" data-action="approach-reply" ${approach.isStreaming ? 'disabled' : ''}>Reply</button>

@@ -37,6 +37,7 @@ export type CrisisType =
   | 'vomiting'
   | 'panic_attack'
   | 'bathroom_emergency'
+  | 'bowel_emergency'
   | 'hypothermia'
   | 'ally_stumble'
   | 'stranger_plea'
@@ -62,6 +63,7 @@ export interface CrisisEffects {
   staminaDrainDuration?: number;
   warningRisk?: number;        // 0-1 chance of warning
   bladderReset?: boolean;
+  bowelReset?: boolean;
   // Ally effects
   allyStamina?: number;
   allyMorale?: number;

@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.10.1 — 2026-03-01
+
+Full 8-category audit remediation — 3 criticals, 6 warnings fixed across 7 files.
+
+### Critical Fixes
+- **NPC walk-off race condition**: NPCs queued in `pendingEliminations` (8s death delay) could walk off a warning during the delay at high game speeds, creating inconsistent state. Added `pendingEliminations.has()` guard to walk-off timer
+- **Alliance UI acceptance bug**: When relationship was 50-59, the "accepted" branch could fire but `formAlliance()` silently rejected (hard gate at 60). Player saw acceptance dialogue with no alliance formed. Now checks return value and shows rejection if engine gate fails
+- **Cupid viz O(n) regression**: `state.walkers.find()` in per-frame cupid match rendering replaced with O(1) `getWalkerState()` map lookup
+
+### Game Balance
+- **Effort dead zone closed**: Effort 40-49% had implicit 1.0x drain modifier (worse than both <40% at 0.6x and 50-57% at 0.7x). Added 0.8x modifier for 40-49% range — drain curve is now monotonically sensible
+- **Bowel emergency crisis**: New `bowel_emergency` crisis auto-triggers at bowel=100, mirroring bladder's `bathroom_emergency`. Options: hold (+5 pain), go (-15 morale, 2 warnings), ally cover (1 warning, -3 ally stamina). 25s timer, speed override 3.0
+- **Pee/poop buttons disabled by warnings**: Pee button disabled at 2+ warnings, poop at 1+ warnings. Shows "(too risky)" label instead of silently failing on click
+
+### Security
+- **Walker name escaping**: Added `escapeHtml()` to 8 innerHTML sites with walker names (walkers panel, dossier, picker, cupid picker, share divider, approach intro, cupid match). Low risk (static data) but closes defense-in-depth gap
+- **Prompt injection hardening**: Player messages stripped of `[GAME STATE]` and `[PLAYER SAYS]` delimiter markers before embedding in LLM input, preventing delimiter injection attacks
+
+### Performance
+- **Audio node leak fixed**: Chord crossfade now explicitly disconnects `BiquadFilterNode` and `GainNode` after fade-out. Previously leaked ~2,250 orphaned node pairs per hour of gameplay
+
 ## 0.10.0 — 2026-03-01
 
 Cupid matchmaking — player can make NPCs fall in love with each other.

@@ -6,7 +6,7 @@
 import { GameState, WalkerState, STAT_LABELS, ProximityZone } from './types';
 import { getRouteSegment, getCrowdPhase } from './data/route';
 import { getPositionTransition } from './engine';
-import { getWalkerData } from './state';
+import { getWalkerData, getWalkerState } from './state';
 
 // ============================================================
 // PHOSPHOR PALETTE
@@ -827,8 +827,8 @@ export function updateVisualization(state: GameState, canvas: HTMLCanvasElement)
   // --- Cupid match connection lines (pink) ---
   for (const match of state.cupidMatches) {
     if (match.heartbroken) continue;
-    const wA = state.walkers.find(w => w.walkerNumber === match.walkerA);
-    const wB = state.walkers.find(w => w.walkerNumber === match.walkerB);
+    const wA = getWalkerState(state, match.walkerA);
+    const wB = getWalkerState(state, match.walkerB);
     if (!wA || !wB || !wA.alive || !wB.alive) continue;
 
     const posA = walkerScreenPos(wA, H, roadLeft, roadWidth, frameCounter);

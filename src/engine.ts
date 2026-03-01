@@ -206,7 +206,8 @@ function updatePlayerStamina(state: GameState, gameMinutes: number, allyNearby: 
   else if (p.effort > 68) modifier *= 1.1;
   else if (p.effort >= 58) modifier *= 0.5; // sweet spot — efficient walking
   else if (p.effort >= 50) modifier *= 0.7; // moderate zone
-  else if (p.effort < 40) modifier *= 0.6; // barely walking, conserving
+  else if (p.effort >= 40) modifier *= 0.8; // easy pace
+  else modifier *= 0.6; // barely walking, conserving
 
   // Alliance benefit (allyNearby computed once per tick in gameTick)
   if (allyNearby) modifier *= 0.9;
@@ -659,7 +660,7 @@ function checkNPCWarnings(state: GameState, gameMinutes: number) {
       npcSlowAccum.set(w.walkerNumber, 0);
 
       // Walk-off timer: 60 game-minutes above 4.0 clears one warning
-      if (w.warnings > 0) {
+      if (w.warnings > 0 && !pendingEliminations.has(w.walkerNumber)) {
         w.warningTimer += gameMinutes;
         if (w.warningTimer >= 60) {
           w.warnings--;
