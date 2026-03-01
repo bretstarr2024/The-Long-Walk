@@ -43,6 +43,7 @@ export function createDefaultPlayer(): PlayerState {
     lastCrisisMile: 0,
     tempEffects: [],
     causeOfDeath: null,
+    lastCupidMile: -20,
   };
 }
 
@@ -131,6 +132,7 @@ export function createInitialGameState(): GameState {
     nextBubbleId: 1,
     ticketQueue: [],
     playerDeathTime: 0,
+    cupidMatches: [],
   };
 }
 

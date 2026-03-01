@@ -767,6 +767,7 @@ export function getGameStats(state: GameState): Record<string, string> {
     'Conversations Had': String(state.conversationHistory.length),
     'Walkers Talked To': String(uniqueWalkers.size),
     'Warnings Received': String(state.player.totalWarningsReceived),
+    'Matches Made': String(state.cupidMatches.length),
     'Day': String(state.world.dayNumber),
   };
 }

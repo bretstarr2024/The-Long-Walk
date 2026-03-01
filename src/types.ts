@@ -27,6 +27,7 @@ export type Screen = 'title' | 'creation' | 'intro' | 'game' | 'dialogue' | 'gam
 export type NarrativeType = 'narration' | 'dialogue' | 'warning' | 'elimination' | 'system' | 'thought' | 'crowd' | 'hallucination' | 'event' | 'overheard';
 export type Act = 1 | 2 | 3 | 4;
 export type HorrorTier = 1 | 2 | 3 | 4;
+export type CupidStage = 'spark' | 'crush' | 'love';
 
 export type CrisisType =
   | 'stumble'
@@ -141,6 +142,7 @@ export interface PlayerState {
   lastCrisisMile: number;
   tempEffects: TempEffect[];
   causeOfDeath: string | null; // set when player is eliminated
+  lastCupidMile: number;       // mile of last matchmaking (cooldown)
 }
 
 // --- Walker Arc System ---
@@ -407,6 +409,7 @@ export interface GameState {
   nextBubbleId: number;
   ticketQueue: TicketData[];
   playerDeathTime: number;  // Date.now() when player eliminated, 0 = alive
+  cupidMatches: CupidMatch[];
 }
 
 // --- Ticket Popup (elimination) ---
@@ -430,6 +433,18 @@ export interface SpeechBubble {
   duration: number;     // ms to display
   position: 'left' | 'right';
   type: 'overheard' | 'warning_reaction';
+}
+
+// --- Cupid Matchmaking ---
+
+export interface CupidMatch {
+  walkerA: number;
+  walkerB: number;
+  stage: CupidStage;
+  createdAtMile: number;
+  lastOverheardMile: number;
+  stageAdvancedMile: number;
+  heartbroken: boolean;
 }
 
 // --- Route Data ---

@@ -13,6 +13,7 @@ import { sendMessage, isServerAvailable } from './agentClient';
 import { buildGameContext, buildWalkerProfile } from './contextBuilder';
 import { toggleMute, getIsMuted } from './audio';
 import { resolveCrisis } from './crises';
+import { createCupidMatch, getCupidMatch } from './cupid';
 
 let app: HTMLElement;
 let currentRenderedScreen: string = '';
@@ -31,6 +32,7 @@ const ICON = {
   talk: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="8" rx="2" stroke="currentColor" stroke-width="1.3"/><path d="M5 11v2.5L8 11" stroke="currentColor" stroke-width="1.3"/></svg>',
   think: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="6" r="4" stroke="currentColor" stroke-width="1.3"/><path d="M6 10.5c0 1.5 1 2.5 2 2.5s2-1 2-2.5" stroke="currentColor" stroke-width="1.3"/><circle cx="7" cy="5.5" r="0.8" fill="currentColor"/><circle cx="9.5" cy="5.5" r="0.8" fill="currentColor"/></svg>',
   observe: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 8s2.5-4 6-4 6 4 6 4-2.5 4-6 4-6-4-6-4z" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.3"/></svg>',
+  cupid: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 4.5C7 3 5 2.5 3.8 3.8 2.5 5 2.8 7 8 11.5c5.2-4.5 5.5-6.5 4.2-7.7C11 2.5 9 3 8 4.5z" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M11 2l2.5 2.5M13.5 2L11 4.5" stroke="currentColor" stroke-width="1"/></svg>',
   stretch: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="3" r="1.5" stroke="currentColor" stroke-width="1.1"/><path d="M8 4.5v5M5 6l3 1.5 3-1.5M6 9.5l-1.5 4M10 9.5l1.5 4" stroke="currentColor" stroke-width="1.3"/></svg>',
   pee: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2C6.8 4.5 5 6.5 5 8.5a3 3 0 006 0C11 6.5 9.2 4.5 8 2z" stroke="currentColor" stroke-width="1.3" fill="none"/></svg>',
   poop: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M6 12h4a2 2 0 00-4 0z" stroke="currentColor" stroke-width="1.2" fill="none"/><path d="M5.5 10h5a1.5 1.5 0 00-5 0z" stroke="currentColor" stroke-width="1.2" fill="none"/><path d="M6.5 8h3a1.5 1.5 0 00-3 0z" stroke="currentColor" stroke-width="1.2" fill="none"/><circle cx="8" cy="5" r="1.2" stroke="currentColor" stroke-width="1.1" fill="none"/></svg>',
@@ -68,6 +70,8 @@ let cachedSceneHtml = '';
 let cachedApproachHtml = '';
 let cachedWarningHtml = '';
 let walkerPickerOpen = false;
+let cupidPickerPhase: 'idle' | 'picking_first' | 'picking_second' = 'idle';
+let cupidFirstPick: number | null = null;
 
 // ============================================================
 // INIT — sets up app ref + event delegation (once)
@@ -108,6 +112,22 @@ function setupEventDelegation() {
     const pickEl = target.closest('[data-pick-walker]') as HTMLElement;
     if (pickEl) {
       const num = parseInt(pickEl.dataset.pickWalker!);
+      // Cupid two-step picker intercept
+      if (cupidPickerPhase === 'picking_first') {
+        console.log('[UI] Cupid first pick:', num);
+        cupidFirstPick = num;
+        cupidPickerPhase = 'picking_second';
+        cachedActionsHtml = '';
+        return;
+      }
+      if (cupidPickerPhase === 'picking_second') {
+        console.log('[UI] Cupid second pick:', num);
+        cupidPickerPhase = 'idle';
+        cachedActionsHtml = '';
+        createCupidMatch(gameState, cupidFirstPick!, num);
+        cupidFirstPick = null;
+        return;
+      }
       console.log('[UI] Walker picked:', num);
       walkerPickerOpen = false;
       cachedActionsHtml = '';
@@ -173,6 +193,7 @@ function handleAction(action: string, state: GameState) {
     case 'observe': handleObserve(state); break;
     case 'stretch': handleStretch(state); break;
     case 'think': handleThink(state); break;
+    case 'cupid': handleCupid(state); break;
     case 'pause': state.isPaused = !state.isPaused; break;
     case 'toggle-pause-chat':
       state.isPaused = !state.isPaused;
@@ -806,6 +827,19 @@ function handleThink(state: GameState) {
   state.player.morale = Math.min(100, state.player.morale + boost);
 }
 
+function handleCupid(state: GameState) {
+  if (cupidPickerPhase !== 'idle') {
+    // Cancel cupid picker
+    cupidPickerPhase = 'idle';
+    cupidFirstPick = null;
+    cachedActionsHtml = '';
+    return;
+  }
+  cupidPickerPhase = 'picking_first';
+  cupidFirstPick = null;
+  cachedActionsHtml = ''; // force re-render with cupid picker
+}
+
 // --- Walker Dossier ---
 let activeDossierWalker: number | null = null;
 
@@ -1390,6 +1424,14 @@ function renderDossier(state: GameState, walkerNum: number): string {
         <div>Status: ${statusLabel} | Warnings: ${w.warnings}/3</div>
       </div>
       ${factsHtml}
+      ${(() => {
+        const cm = getCupidMatch(state, walkerNum);
+        if (!cm) return '';
+        const partnerNum = cm.walkerA === walkerNum ? cm.walkerB : cm.walkerA;
+        const partnerData = getWalkerData(state, partnerNum);
+        const stageLabel = cm.stage === 'spark' ? 'Spark' : cm.stage === 'crush' ? 'Crush' : 'In Love';
+        return `<div class="dossier-section"><div class="dossier-label">MATCHED WITH</div><div class="dossier-fact">${partnerData?.name || 'Walker #' + partnerNum} (${stageLabel})</div></div>`;
+      })()}
       <div class="dossier-actions">
         ${canTalk ? `<button class="action-btn dossier-talk-btn" data-action="dossier-talk"><span class="si si-talk">${ICON.talk}</span>Talk</button>` : ''}
         <button class="action-btn" data-action="dossier-close">Close</button>
@@ -1487,6 +1529,46 @@ function updateActionsPanel(state: GameState) {
   const thinkCd = !inCrisis && (state.world.milesWalked - p.lastThinkMile) < 5
     ? ` (${Math.ceil(5 - (state.world.milesWalked - p.lastThinkMile))}mi)` : '';
 
+  // Cupid button + picker
+  const activeNonHeartbroken = state.cupidMatches.filter(m => !m.heartbroken).length;
+  const cupidOnCd = (state.world.milesWalked - p.lastCupidMile) < 15;
+  const cupidDisabled = inCrisis || !state.llmAvailable || activeNonHeartbroken >= 3 || cupidOnCd || state.world.milesWalked < 15;
+  const cupidCd = !inCrisis && cupidOnCd && state.world.milesWalked >= 15
+    ? ` (${Math.ceil(15 - (state.world.milesWalked - p.lastCupidMile))}mi)` : '';
+
+  let cupidPickerHtml = '';
+  if (cupidPickerPhase !== 'idle') {
+    const cupidCandidates = nearby.filter(w => {
+      const d = getWalkerData(state, w.walkerNumber);
+      if (!d || d.tier > 2 || !w.alive) return false;
+      if (state.cupidMatches.some(m => !m.heartbroken && (m.walkerA === w.walkerNumber || m.walkerB === w.walkerNumber))) return false;
+      if (cupidPickerPhase === 'picking_second' && w.walkerNumber === cupidFirstPick) return false;
+      return true;
+    });
+    const firstName = cupidPickerPhase === 'picking_second' && cupidFirstPick
+      ? getWalkerData(state, cupidFirstPick)?.name || 'Walker' : '';
+    const pickerTitle = cupidPickerPhase === 'picking_first'
+      ? 'Play Cupid! Pick the first walker:'
+      : `Pick a partner for ${firstName}:`;
+    const cupidItems = cupidCandidates.map(w => {
+      const d = getWalkerData(state, w.walkerNumber);
+      if (!d) return '';
+      const rel = getRelationshipTier(w);
+      const tierLabel = d.tier === 1 ? 'T1' : 'T2';
+      const tierClass = 'tier-major';
+      return `
+        <button class="picker-item" data-pick-walker="${w.walkerNumber}">
+          <span class="picker-name">${d.name} <span class="picker-num">#${w.walkerNumber}</span></span>
+          <span class="picker-info"><span class="picker-tier ${tierClass}">${tierLabel}</span> <span class="walker-disposition ${rel}">${rel}</span></span>
+        </button>`;
+    }).join('');
+    cupidPickerHtml = `
+      <div class="walker-picker">
+        <div class="picker-title">${pickerTitle}</div>
+        ${cupidItems.length > 0 ? cupidItems : '<div class="picker-empty">No eligible walkers nearby</div>'}
+      </div>`;
+  }
+
   const html = `
     <div class="panel-title">ACTIONS</div>
     <button class="action-btn ${walkerPickerOpen ? 'active' : ''}" data-action="talk" ${talkDisabled ? 'disabled' : ''}><span class="si si-talk">${ICON.talk}</span>Talk</button>
@@ -1507,6 +1589,8 @@ function updateActionsPanel(state: GameState) {
     <button class="action-btn" data-action="stretch" ${stretchDisabled ? 'disabled' : ''}><span class="si si-stretch">${ICON.stretch}</span>Stretch${stretchCd}</button>
     <button class="action-btn" data-action="observe" ${observeDisabled ? 'disabled' : ''}><span class="si si-observe">${ICON.observe}</span>Look Around${observeCd}</button>
     <button class="action-btn" data-action="think" ${thinkDisabled ? 'disabled' : ''}><span class="si si-think">${ICON.think}</span>Prize${thinkCd}</button>
+    <button class="action-btn ${cupidPickerPhase !== 'idle' ? 'active' : ''}" data-action="cupid" ${cupidDisabled ? 'disabled' : ''}><span class="si si-cupid">${ICON.cupid}</span>Cupid${cupidCd}</button>
+    ${cupidPickerHtml}
   `;
 
   if (html !== cachedActionsHtml) {

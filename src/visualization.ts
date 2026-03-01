@@ -824,6 +824,41 @@ export function updateVisualization(state: GameState, canvas: HTMLCanvasElement)
     ctx.stroke();
   }
 
+  // --- Cupid match connection lines (pink) ---
+  for (const match of state.cupidMatches) {
+    if (match.heartbroken) continue;
+    const wA = state.walkers.find(w => w.walkerNumber === match.walkerA);
+    const wB = state.walkers.find(w => w.walkerNumber === match.walkerB);
+    if (!wA || !wB || !wA.alive || !wB.alive) continue;
+
+    const posA = walkerScreenPos(wA, H, roadLeft, roadWidth, frameCounter);
+    const posB = walkerScreenPos(wB, H, roadLeft, roadWidth, frameCounter);
+
+    // Pink dashed line with gentle pulse
+    const pulse = 0.3 + 0.2 * Math.sin(frameCounter * 0.03);
+    ctx.strokeStyle = `rgba(255, 100, 180, ${pulse * nightDim})`;
+    ctx.lineWidth = 0.8;
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath();
+    ctx.moveTo(posA.x, posA.y);
+    ctx.lineTo(posB.x, posB.y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Heart icon at midpoint for crush/love stages
+    if (match.stage !== 'spark') {
+      const mx = (posA.x + posB.x) / 2;
+      const my = (posA.y + posB.y) / 2;
+      const hs = match.stage === 'love' ? 4 : 3;
+      ctx.fillStyle = `rgba(255, 100, 180, ${(match.stage === 'love' ? 0.6 : 0.4) * nightDim})`;
+      ctx.beginPath();
+      ctx.moveTo(mx, my + hs * 0.4);
+      ctx.bezierCurveTo(mx - hs, my - hs * 0.3, mx - hs * 0.5, my - hs, mx, my - hs * 0.3);
+      ctx.bezierCurveTo(mx + hs * 0.5, my - hs, mx + hs, my - hs * 0.3, mx, my + hs * 0.4);
+      ctx.fill();
+    }
+  }
+
   // --- Tier 1 walker name labels ---
   for (const w of state.walkers) {
     if (!w.alive) continue;

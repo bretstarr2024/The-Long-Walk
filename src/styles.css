@@ -1268,6 +1268,7 @@ html, body {
 .si-think { color: var(--accent-purple); }
 .si-observe { color: var(--accent-amber); }
 .si-stretch { color: var(--accent-green); }
+.si-cupid { color: #ff69b4; }
 .si-pee { color: #f0c040; }
 .si-poop { color: #a67c52; }
 .si-stamina { color: var(--accent-green); }

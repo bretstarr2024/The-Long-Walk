@@ -10,6 +10,7 @@ import {
   checkForCrisis, updateActiveCrisis, updateBladder, updateBowel, updateTempEffects,
   getActiveSpeedOverride, getActiveStaminaDrainMult, triggerBondedGriefCrisis,
 } from './crises';
+import { handleCupidHeartbreak, updateCupidCouples } from './cupid';
 
 // ============================================================
 // HELPERS
@@ -68,6 +69,9 @@ export function gameTick(state: GameState, realDeltaMs: number) {
 
   // Walk Together effects: morale boost + stamina cost per minute
   updateWalkTogether(state, gameMinutes);
+
+  // Cupid couple morale boost
+  updateCupidCouples(state, gameMinutes);
 
   // Enemy detection: relationship thresholds
   updateEnemyStatus(state);
@@ -906,6 +910,9 @@ function eliminateWalker(state: GameState, w: WalkerState, data: import('./types
       triggerBondedGriefCrisis(state);
     }
   }
+
+  // Cupid heartbreak
+  handleCupidHeartbreak(state, w.walkerNumber);
 
   // Remove from alliances
   if (w.isAlliedWithPlayer) {

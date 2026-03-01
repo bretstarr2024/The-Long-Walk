@@ -7,6 +7,7 @@ import { createInitialGameState, addNarrative } from './state';
 import { gameTick, processPendingEliminations } from './engine';
 import { checkScriptedEvents, checkHallucinations, checkOverheards, checkEnding, checkAbsenceEffects } from './narrative';
 import { checkAmbientOverhear } from './overhear';
+import { checkCupidOverheards } from './cupid';
 import { checkApproach } from './approach';
 import { initUI, render, setEnding, closeWalkerPicker, closeDossier, handleSceneNext, handleSceneClose, closeLLMDialogue } from './ui';
 import { closeDialogue } from './dialogue';
@@ -103,6 +104,9 @@ function gameLoop(timestamp: number) {
 
     // Check ambient LLM overheards
     checkAmbientOverhear(state);
+
+    // Check cupid romantic overheards
+    checkCupidOverheards(state);
 
     // Check hallucinations
     checkHallucinations(state);

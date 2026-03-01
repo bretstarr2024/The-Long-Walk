@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.10.0 — 2026-03-01
+
+Cupid matchmaking — player can make NPCs fall in love with each other.
+
+### New Feature: Cupid Matchmaking
+- **Play Cupid action**: New button in the actions panel lets the player pick two nearby Tier 1/2 walkers and spark a romance between them. Two-step picker: choose Walker A, then Walker B
+- **Romantic progression**: Matches deepen over miles walked — Spark (0-20 miles, shy glances), Crush (20-60 miles, walking closer), In Love (60+ miles, tender moments). Stage transitions produce narrative entries
+- **LLM romantic overheards**: Matched pairs get romantic overheard conversations every ~12 miles, displayed as speech bubbles. Uses existing `/api/overhear` endpoint with romantic scene prompts — no server changes needed. 3 unique prompts per stage, randomly selected
+- **Pink radar lines**: Pulsing pink dashed lines connect matched pairs on the green phosphor radar. Crush/Love stages show a bezier-curve heart icon at the midpoint, scaling with stage
+- **Couple morale boost**: Matched pairs walking in the same position boost each other's morale (+1/mile spark, +2/mile crush, +3/mile love)
+- **Heartbreak**: When a matched walker is eliminated, the surviving partner suffers morale devastation scaling with stage (-10 spark, -20 crush, -35 love), with a unique heartbreak narrative. Player also loses -10 morale
+- **Dossier integration**: Walker dossier shows match status ("Matched with [Name] (Spark/Crush/In Love)")
+- **Game over stat**: "Matches Made" shown on the game over screen
+- **Gating**: Minimum mile 15, 15-mile cooldown between matchmaking, max 3 active (non-heartbroken) matches, gender-agnostic
+
+### New File
+- `src/cupid.ts` — Core matchmaking module: `createCupidMatch()`, `checkCupidOverheards()`, `updateCupidCouples()`, `handleCupidHeartbreak()`, `getCupidMatch()`, `resetCupidGlobals()`
+
 ## 0.9.2 — 2026-02-28
 
 Seven playtest bugs fixed — visualization scrolling, audio, player warnings, and player death gunshot.
